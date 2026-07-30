@@ -159,6 +159,24 @@ export function ChampAdresse({ onChoisie, adresseChoisie }: Props) {
   if (manuel) {
     return (
       <div className="flex flex-col gap-2">
+        {/* Ne jamais tomber en saisie manuelle sans dire pourquoi : sinon on
+            croit à un bug de l'autocomplete alors que c'est la configuration. */}
+        {!placesConfigure() && (
+          <p
+            role="status"
+            className="rounded-lg border border-grey-border bg-grey-light px-3 py-2 text-sm text-grey-text"
+          >
+            Recherche d’adresse désactivée : aucune clé Google n’est configurée.
+            {process.env.NODE_ENV !== 'production' && (
+              <span className="mt-1 block text-xs">
+                Ajoute <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> dans{' '}
+                <code>.env.local</code>, puis <strong>redémarre le serveur</strong>{' '}
+                — cette variable est inlinée à la compilation, pas lue à
+                l’exécution.
+              </span>
+            )}
+          </p>
+        )}
         <input
           value={manuelAdresse}
           onChange={(e) => setManuelAdresse(e.target.value)}
