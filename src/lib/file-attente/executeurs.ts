@@ -71,6 +71,8 @@ export type ChargeCreationLead = {
   latitude: number | null
   longitude: number | null
   clientNom: string | null
+  /** Déjà normalisé en E.164 par le formulaire (`versE164`). */
+  clientTel: string | null
   note: string | null
   statut: StatutOpp
   /** ISO. Renseigné seulement si `statut === 'rdv'`. */
@@ -128,6 +130,7 @@ function lireChargeCreationLead(charge: unknown): ChargeCreationLead {
     latitude: nombreOuNull(c.latitude),
     longitude: nombreOuNull(c.longitude),
     clientNom: texteOuNull(c.clientNom),
+    clientTel: texteOuNull(c.clientTel),
     note: texteOuNull(c.note),
     statut: c.statut,
     dateRdv: texteOuNull(c.dateRdv),
@@ -171,6 +174,7 @@ async function creerLead(charge: ChargeCreationLead): Promise<void> {
       latitude: charge.latitude,
       longitude: charge.longitude,
       client_nom: charge.clientNom,
+      client_tel: charge.clientTel,
       statut: charge.statut,
       date_rdv: charge.dateRdv,
       nb_visites: 1,
@@ -200,7 +204,7 @@ async function majLead(charge: ChargeCreationLead & { opportuniteId: string }): 
 
   const { data: existante, error: erreurLecture } = await supabase
     .from('opportunites')
-    .select('nb_visites, statut, date_rdv, nb_reports, client_nom')
+    .select('nb_visites, statut, date_rdv, nb_reports, client_nom, client_tel')
     .eq('id', charge.opportuniteId)
     .single()
 
@@ -221,6 +225,7 @@ async function majLead(charge: ChargeCreationLead & { opportuniteId: string }): 
       derniere_visite: charge.saisiLe,
       // Ne jamais effacer une donnée déjà saisie avec un champ laissé vide.
       client_nom: charge.clientNom ?? existante.client_nom,
+      client_tel: charge.clientTel ?? existante.client_tel,
       ...(charge.dateRdv ? { date_rdv: charge.dateRdv } : {}),
       ...(charge.closerId ? { closer_id: charge.closerId } : {}),
       ...(reporteLeRdv ? { nb_reports: existante.nb_reports + 1 } : {}),

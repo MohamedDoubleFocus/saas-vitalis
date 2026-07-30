@@ -11,6 +11,7 @@ import type { ChargeCreationLead } from '@/lib/file-attente/executeurs'
 import { useFileAttente } from '@/lib/file-attente/fournisseur'
 import type { AdresseSelectionnee } from '@/lib/google-places'
 import { AIDES_STATUT_CONTACT, LIBELLES_STATUT, STATUTS_CONTACT } from '@/lib/statuts'
+import { estTelephoneValide, versE164 } from '@/lib/telephone'
 
 import { ChampAdresse } from './champ-adresse'
 import { ChoixPlage } from './choix-plage'
@@ -40,6 +41,7 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
   const [doublon, setDoublon] = useState<EtatDoublon>({ statut: 'aucun' })
   const [statut, setStatut] = useState<StatutOpp>('absent')
   const [clientNom, setClientNom] = useState('')
+  const [clientTel, setClientTel] = useState('')
   const [note, setNote] = useState('')
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -96,11 +98,24 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
   const doublonEnAttenteDeDecision =
     doublon.statut === 'trouve' && !doublon.accepte
 
+  const rdv = statut === 'rdv'
+  const telSaisi = clientTel.trim()
+  const telInvalide = telSaisi !== '' && !estTelephoneValide(telSaisi)
+
+  /**
+   * Un rendez-vous sans nom ni numéro est inexploitable : le closer doit pouvoir
+   * confirmer avant de se déplacer. Ailleurs, ces champs restent facultatifs —
+   * on n'a ni nom ni numéro d'une porte où personne n'a répondu.
+   */
+  const coordonneesCompletes =
+    clientNom.trim() !== '' && estTelephoneValide(telSaisi)
+
   const peutContinuer =
     Boolean(adresse) &&
     !doublonEnAttenteDeDecision &&
     doublon.statut !== 'recherche' &&
-    !enregistrement
+    !enregistrement &&
+    (!rdv || coordonneesCompletes)
 
   async function enregistrer(creneau: Creneau | null) {
     if (!adresse) return
@@ -125,6 +140,9 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
       latitude: adresse.latitude,
       longitude: adresse.longitude,
       clientNom: clientNom.trim() || null,
+      // E.164 si le numéro est lisible ; sinon on conserve la saisie brute
+      // plutôt que de la jeter — « ne jamais perdre une saisie » (§5).
+      clientTel: telSaisi === '' ? null : (versE164(telSaisi) ?? telSaisi),
       note: note.trim() || null,
       statut,
       dateRdv: creneau ? creneau.debut.toISOString() : null,
@@ -148,6 +166,7 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
     setDoublon({ statut: 'aucun' })
     setStatut('absent')
     setClientNom('')
+    setClientTel('')
     setNote('')
     setSaisiLe(null)
     setErreur(null)
@@ -298,40 +317,52 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
         </fieldset>
       </section>
 
-      {/* 3. Facultatif — replié pour ne pas allonger le formulaire. */}
-      <details className="rounded-2xl bg-white shadow-card">
-        <summary className="flex h-11 cursor-pointer list-none items-center px-4 font-display text-base font-semibold text-navy">
-          Nom et notes (facultatif)
-        </summary>
+      {/* 3. Coordonnées du client.
+          Dépliées et obligatoires dès qu'il y a rendez-vous ; repliées sinon,
+          pour qu'une porte sans réponse reste une saisie de quelques secondes. */}
+      {rdv ? (
+        <section className="rounded-2xl bg-white p-4 shadow-card">
+          <h2 className="font-display text-base font-semibold text-navy">
+            Coordonnées du client
+          </h2>
+          <p className="mt-0.5 text-xs text-grey-text">
+            Obligatoires pour un rendez-vous : le closer doit pouvoir confirmer
+            avant de se déplacer.
+          </p>
 
-        <div className="flex flex-col gap-3 border-t border-grey-border p-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="client_nom" className="text-sm font-medium text-navy">
-              Nom du client
-            </label>
-            <input
-              id="client_nom"
-              value={clientNom}
-              onChange={(e) => setClientNom(e.target.value)}
-              autoComplete="off"
-              className={CLASSE_CHAMP}
+          <div className="mt-3 flex flex-col gap-3">
+            <ChampsClient
+              clientNom={clientNom}
+              setClientNom={setClientNom}
+              clientTel={clientTel}
+              setClientTel={setClientTel}
+              note={note}
+              setNote={setNote}
+              telInvalide={telInvalide}
+              requis
             />
           </div>
+        </section>
+      ) : (
+        <details className="rounded-2xl bg-white shadow-card">
+          <summary className="flex h-11 cursor-pointer list-none items-center px-4 font-display text-base font-semibold text-navy">
+            Nom, téléphone et note (facultatif)
+          </summary>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="note" className="text-sm font-medium text-navy">
-              Note
-            </label>
-            <textarea
-              id="note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              className="w-full rounded-lg border border-grey-border bg-white px-3 py-2 text-base text-navy outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+          <div className="flex flex-col gap-3 border-t border-grey-border p-4">
+            <ChampsClient
+              clientNom={clientNom}
+              setClientNom={setClientNom}
+              clientTel={clientTel}
+              setClientTel={setClientTel}
+              note={note}
+              setNote={setNote}
+              telInvalide={telInvalide}
+              requis={false}
             />
           </div>
-        </div>
-      </details>
+        </details>
+      )}
 
       {/* Action principale, collée au-dessus de la barre de navigation. */}
       <div className="sticky bottom-24">
@@ -352,14 +383,99 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
             ? 'Choisis une adresse'
             : doublonEnAttenteDeDecision
               ? 'Décide pour le doublon'
-              : enregistrement
-                ? 'Enregistrement…'
-                : statut === 'rdv'
-                  ? 'Choisir la plage'
-                  : 'Enregistrer le lead'}
+              : rdv && !coordonneesCompletes
+                ? 'Nom et téléphone requis'
+                : enregistrement
+                  ? 'Enregistrement…'
+                  : rdv
+                    ? 'Choisir la plage'
+                    : 'Enregistrer le lead'}
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Nom, téléphone et note du client.
+ *
+ * Mêmes champs dans les deux présentations (section dépliée pour un rendez-vous,
+ * dépliant ailleurs) : la saisie déjà faite survit au changement de statut.
+ */
+function ChampsClient({
+  clientNom,
+  setClientNom,
+  clientTel,
+  setClientTel,
+  note,
+  setNote,
+  telInvalide,
+  requis,
+}: {
+  clientNom: string
+  setClientNom: (valeur: string) => void
+  clientTel: string
+  setClientTel: (valeur: string) => void
+  note: string
+  setNote: (valeur: string) => void
+  telInvalide: boolean
+  requis: boolean
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="client_nom" className="text-sm font-medium text-navy">
+          Nom complet{requis && <span aria-hidden> *</span>}
+        </label>
+        <input
+          id="client_nom"
+          value={clientNom}
+          onChange={(e) => setClientNom(e.target.value)}
+          required={requis}
+          autoComplete="name"
+          autoCapitalize="words"
+          className={CLASSE_CHAMP}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="client_tel" className="text-sm font-medium text-navy">
+          Téléphone{requis && <span aria-hidden> *</span>}
+        </label>
+        {/* `type="tel"` + `inputMode="tel"` : clavier numérique au premier tap. */}
+        <input
+          id="client_tel"
+          type="tel"
+          inputMode="tel"
+          value={clientTel}
+          onChange={(e) => setClientTel(e.target.value)}
+          required={requis}
+          autoComplete="tel"
+          placeholder="(450) 555-1234"
+          aria-invalid={telInvalide || undefined}
+          aria-describedby={telInvalide ? 'erreur_tel' : undefined}
+          className={CLASSE_CHAMP}
+        />
+        {telInvalide && (
+          <p id="erreur_tel" className="text-xs text-red-800">
+            Numéro à 10 chiffres attendu.
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="note" className="text-sm font-medium text-navy">
+          Note
+        </label>
+        <textarea
+          id="note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-grey-border bg-white px-3 py-2 text-base text-navy outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+        />
+      </div>
+    </>
   )
 }
 

@@ -11,6 +11,7 @@ import {
 } from '@/lib/echeances'
 import { LIBELLES_STATUT } from '@/lib/statuts'
 import { createClient } from '@/lib/supabase/server'
+import { formaterTelephone, lienTelephone } from '@/lib/telephone'
 
 export const metadata: Metadata = {
   title: 'Mes meetings — Vitalis',
@@ -32,7 +33,7 @@ export default async function PageMeetings() {
   // ordre chronologique inverse une fois filtrés côté rendu.
   const { data } = await supabase
     .from('opportunites')
-    .select('id, adresse, ville, client_nom, statut, date_rdv')
+    .select('id, adresse, ville, client_nom, client_tel, statut, date_rdv')
     .eq('knocker_id', session.userId)
     .not('date_rdv', 'is', null)
     .order('date_rdv', { ascending: true })
@@ -68,6 +69,7 @@ export default async function PageMeetings() {
                     adresse={meeting.adresse}
                     ville={meeting.ville}
                     clientNom={meeting.client_nom}
+                    clientTel={meeting.client_tel}
                     statut={meeting.statut}
                     dateRdv={meeting.dateRdv!}
                     maintenant={maintenant}
@@ -89,6 +91,7 @@ export default async function PageMeetings() {
                     adresse={meeting.adresse}
                     ville={meeting.ville}
                     clientNom={meeting.client_nom}
+                    clientTel={meeting.client_tel}
                     statut={meeting.statut}
                     dateRdv={meeting.dateRdv!}
                     maintenant={maintenant}
@@ -107,6 +110,7 @@ function CarteMeeting({
   adresse,
   ville,
   clientNom,
+  clientTel,
   statut,
   dateRdv,
   maintenant,
@@ -114,10 +118,12 @@ function CarteMeeting({
   adresse: string
   ville: string | null
   clientNom: string | null
+  clientTel: string | null
   statut: Parameters<typeof estClose>[0]
   dateRdv: Date
   maintenant: Date
 }) {
+  const tel = lienTelephone(clientTel)
   const passe = estPasse(dateRdv, maintenant)
   const close = estClose(statut)
 
@@ -156,6 +162,17 @@ function CarteMeeting({
         <p className="mt-1 truncate text-xs text-grey-text">
           {[adresse, ville].filter(Boolean).join(', ')}
         </p>
+      )}
+
+      {/* Le numéro sert à quelque chose : un tap l'appelle. Cible 44px. */}
+      {tel && (
+        <a
+          href={tel}
+          className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-strong"
+        >
+          <span aria-hidden>☏</span>
+          {formaterTelephone(clientTel)}
+        </a>
       )}
 
       {passe && !close && statut === 'rdv' && (
