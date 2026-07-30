@@ -1,5 +1,6 @@
 'use client'
 
+import { Camera } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
 
@@ -107,7 +108,7 @@ export function CapturePhoto({ opportuniteId }: { opportuniteId: string }) {
           envoi ? 'pointer-events-none opacity-60' : ''
         }`}
       >
-        <span aria-hidden>◎</span>
+        <Camera className="size-6" aria-hidden />
         {envoi ? (progression ?? 'Envoi…') : 'Prendre une photo'}
       </label>
 

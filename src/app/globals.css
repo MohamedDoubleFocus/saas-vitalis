@@ -4,22 +4,65 @@
  * Tokens de design — CLAUDE.md §6.
  * Tailwind v4 dérive les utilitaires du nom de la variable :
  *   --color-brand   → bg-brand, text-brand, border-brand
+ *   --text-sm       → text-sm
  *   --shadow-card   → shadow-card
  *   --font-display  → font-display
  * Aucun thème sombre : outil interne, une seule apparence.
  * ------------------------------------------------------------------------- */
 @theme {
+  /* --- Couleurs --------------------------------------------------------- */
   --color-navy: #111418;
   --color-brand: #54c3ea;
   --color-brand-hover: #2aa8d6;
   --color-brand-strong: #0e7ba6;
-  --color-grey-text: #5a6b7b;
+
+  /*
+   * Texte secondaire. Anciennement #5a6b7b, qui ne donnait que 5,1:1 sur le
+   * fond de l'app — conforme AA, mais illisible sur un toit en plein soleil.
+   * #3f4f60 monte à 7,8:1 sur `grey-light` et 8,4:1 sur blanc : AAA sur les
+   * deux, tout en restant nettement plus clair que `navy` (18,5:1), donc la
+   * hiérarchie visuelle tient toujours.
+   */
+  --color-grey-text: #3f4f60;
+
   --color-grey-light: #f4f6f8;
   --color-grey-border: #e2e8f0;
 
+  /* --- Typographie ------------------------------------------------------- */
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
 
+  /*
+   * Échelle remontée pour l'usage terrain : téléphone tenu à bout de bras,
+   * dehors, souvent avec des gants.
+   *
+   *   text-xs   14px  PLANCHER ABSOLU — métadonnées uniquement
+   *   text-sm   16px  corps de texte
+   *   text-base 18px  champs de saisie, titres de carte
+   *   text-lg   22px  titres de section
+   *   text-xl   26px
+   *   text-2xl  32px  valeurs qui doivent sauter aux yeux (montants, scores)
+   *   text-3xl  40px
+   *
+   * Aucun texte fonctionnel ne descend sous 14px : `text-xs` EST le plancher,
+   * il n'existe rien en dessous dans l'échelle.
+   */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.35;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.45;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.375rem;
+  --text-lg--line-height: 1.35;
+  --text-xl: 1.625rem;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 2.5rem;
+  --text-3xl--line-height: 1.15;
+
+  /* --- Ombres ------------------------------------------------------------ */
   --shadow-card:
     0 2px 4px -1px rgba(10, 14, 22, 0.06), 0 12px 28px -8px rgba(10, 14, 22, 0.16);
   --shadow-cta: 0 8px 20px rgba(84, 195, 234, 0.32);
@@ -29,4 +72,17 @@ body {
   background-color: var(--color-grey-light);
   color: var(--color-navy);
   font-family: var(--font-sans);
+  /* Corps par défaut à 16px : rien ne doit être plus petit sans raison. */
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+
+/*
+ * Les icônes Lucide héritent de `currentColor` : elles prennent donc exactement
+ * la couleur du texte qui les entoure et ne peuvent pas être plus pâles que lui
+ * (CLAUDE.md §6). `stroke-width` remonté à 2,25 pour qu'elles restent franches
+ * en plein jour.
+ */
+.lucide {
+  stroke-width: 2.25;
 }

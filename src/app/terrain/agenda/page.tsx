@@ -1,3 +1,5 @@
+import { IconeStatut } from '@/components/icones'
+
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
@@ -178,7 +180,7 @@ function CarteRdv({
             {clientNom || adresse}
           </p>
           <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+            className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
               vendu
                 ? 'bg-navy text-white'
                 : statut === 'perdu'
@@ -186,7 +188,8 @@ function CarteRdv({
                   : 'bg-grey-light text-grey-text'
             }`}
           >
-            {LIBELLES_STATUT[statut]}
+            <IconeStatut statut={statut} className="size-4" />
+          {LIBELLES_STATUT[statut]}
           </span>
         </div>
 

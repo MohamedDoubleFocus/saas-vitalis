@@ -1,3 +1,6 @@
+import { IconeStatut } from '@/components/icones'
+
+import { Navigation, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
@@ -141,7 +144,7 @@ export default async function PageChantier({ params, searchParams }: Props) {
                 Chantier
               </h2>
               <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                   job.statut === 'complete'
                     ? 'bg-navy text-white'
                     : job.statut === 'en_cours'
@@ -149,7 +152,8 @@ export default async function PageChantier({ params, searchParams }: Props) {
                       : 'bg-grey-light text-grey-text'
                 }`}
               >
-                {LIBELLES_STATUT[job.statut]}
+                <IconeStatut statut={job.statut} className="size-4" />
+          {LIBELLES_STATUT[job.statut]}
               </span>
             </div>
 
@@ -184,7 +188,7 @@ export default async function PageChantier({ params, searchParams }: Props) {
                   href={tel}
                   className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-grey-border text-sm font-semibold text-navy transition-colors hover:bg-grey-light"
                 >
-                  <span aria-hidden>☏</span>
+                  <Phone className="size-5" aria-hidden />
                   {formaterTelephone(job.client_tel)}
                 </a>
               )}
@@ -194,7 +198,7 @@ export default async function PageChantier({ params, searchParams }: Props) {
                 rel="noopener noreferrer"
                 className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-grey-border text-sm font-semibold text-navy transition-colors hover:bg-grey-light"
               >
-                <span aria-hidden>➤</span>
+                <Navigation className="size-5" aria-hidden />
                 Y aller
               </a>
             </div>

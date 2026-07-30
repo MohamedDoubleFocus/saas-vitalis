@@ -1,3 +1,6 @@
+import { IconeStatut } from '@/components/icones'
+
+import { Navigation, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -113,7 +116,7 @@ export default async function PageDetailRdv({ params }: Props) {
               {dateRdv ? formaterDateHeure(dateRdv) : 'Date inconnue'}
             </p>
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                 vendu
                   ? 'bg-navy text-white'
                   : opportunite.statut === 'perdu'
@@ -121,7 +124,8 @@ export default async function PageDetailRdv({ params }: Props) {
                     : 'bg-grey-light text-grey-text'
               }`}
             >
-              {LIBELLES_STATUT[opportunite.statut]}
+              <IconeStatut statut={opportunite.statut} className="size-4" />
+          {LIBELLES_STATUT[opportunite.statut]}
             </span>
           </div>
 
@@ -156,7 +160,7 @@ export default async function PageDetailRdv({ params }: Props) {
                 href={tel}
                 className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-grey-border text-sm font-semibold text-navy transition-colors hover:bg-grey-light"
               >
-                <span aria-hidden>☏</span>
+                <Phone className="size-5" aria-hidden />
                 {formaterTelephone(opportunite.client_tel)}
               </a>
             )}
@@ -167,7 +171,7 @@ export default async function PageDetailRdv({ params }: Props) {
               rel="noopener noreferrer"
               className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-grey-border text-sm font-semibold text-navy transition-colors hover:bg-grey-light"
             >
-              <span aria-hidden>➤</span>
+              <Navigation className="size-5" aria-hidden />
               Y aller
             </a>
           </div>

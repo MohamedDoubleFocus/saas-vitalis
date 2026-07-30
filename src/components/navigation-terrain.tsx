@@ -1,5 +1,7 @@
 'use client'
 
+import { CalendarClock, Map, Plus, Trophy } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -18,19 +20,18 @@ import type { RoleUser } from '@/lib/roles'
 type Onglet = {
   href: string
   libelle: string
-  /** Glyphe décoratif — `aria-hidden`, le libellé porte le sens. */
-  icone: string
+  icone: LucideIcon
 }
 
 const ONGLETS_KNOCKER: readonly Onglet[] = [
-  { href: '/terrain/rues', libelle: 'Rues', icone: '▤' },
-  { href: '/terrain/meetings', libelle: 'Meetings', icone: '◷' },
-  { href: '/terrain/classement', libelle: 'Classement', icone: '▲' },
+  { href: '/terrain/rues', libelle: 'Rues', icone: Map },
+  { href: '/terrain/meetings', libelle: 'Meetings', icone: CalendarClock },
+  { href: '/terrain/classement', libelle: 'Classement', icone: Trophy },
 ]
 
 const ONGLETS_CLOSER: readonly Onglet[] = [
-  { href: '/terrain/agenda', libelle: 'Agenda', icone: '◷' },
-  { href: '/terrain/classement', libelle: 'Classement', icone: '▲' },
+  { href: '/terrain/agenda', libelle: 'Agenda', icone: CalendarClock },
+  { href: '/terrain/classement', libelle: 'Classement', icone: Trophy },
 ]
 
 function ongletsPour(role: RoleUser): readonly Onglet[] {
@@ -62,19 +63,20 @@ export function NavigationTerrain({ role }: { role: RoleUser }) {
       <ul className="mx-auto flex max-w-[440px] items-stretch justify-around px-2">
         {onglets.map((onglet) => {
           const actif = estActif(chemin, onglet.href)
+          const Icone = onglet.icone
 
           return (
             <li key={onglet.href} className="flex-1">
               <Link
                 href={onglet.href}
                 aria-current={actif ? 'page' : undefined}
-                className={`flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs font-medium transition-colors ${
+                // Inactif en `grey-text` (contraste AAA) et non en gris pâle :
+                // un onglet non sélectionné doit rester lisible au soleil.
+                className={`flex min-h-16 flex-col items-center justify-center gap-1 px-1 py-1.5 text-xs font-semibold transition-colors ${
                   actif ? 'text-brand-strong' : 'text-grey-text'
                 }`}
               >
-                <span aria-hidden className="text-base leading-none">
-                  {onglet.icone}
-                </span>
+                <Icone className="size-7 shrink-0" aria-hidden />
                 {onglet.libelle}
               </Link>
             </li>
@@ -86,12 +88,12 @@ export function NavigationTerrain({ role }: { role: RoleUser }) {
             <Link
               href="/terrain/lead"
               aria-current={estActif(chemin, '/terrain/lead') ? 'page' : undefined}
-              className="flex min-h-14 flex-col items-center justify-center py-1"
+              className="flex min-h-16 flex-col items-center justify-center py-1.5"
             >
               {/* Pastille surélevée : `brand` est réservé aux actions
                   (CLAUDE.md §6), et créer un lead EST l'action de l'app. */}
-              <span className="flex size-12 items-center justify-center rounded-full bg-brand text-2xl leading-none font-semibold text-white shadow-cta">
-                <span aria-hidden>+</span>
+              <span className="flex size-14 items-center justify-center rounded-full bg-brand text-white shadow-cta">
+                <Plus className="size-8" aria-hidden strokeWidth={2.75} />
               </span>
               <span className="sr-only">Nouveau lead</span>
             </Link>

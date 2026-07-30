@@ -1,3 +1,6 @@
+import { IconeStatut } from '@/components/icones'
+
+import { Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 
 import { CadrePage } from '@/components/cadre-page'
@@ -137,7 +140,7 @@ function CarteMeeting({
         {/* `brand` est réservé aux actions et au statut « Confirmée » : un
             résultat de meeting se marque en gris ou en rouge, pas en brand. */}
         <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+          className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
             close
               ? 'bg-navy text-white'
               : statut === 'perdu'
@@ -145,6 +148,7 @@ function CarteMeeting({
                 : 'bg-grey-light text-grey-text'
           }`}
         >
+          <IconeStatut statut={statut} className="size-4" />
           {LIBELLES_STATUT[statut]}
         </span>
       </div>
@@ -170,7 +174,7 @@ function CarteMeeting({
           href={tel}
           className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-strong"
         >
-          <span aria-hidden>☏</span>
+          <Phone className="size-5" aria-hidden />
           {formaterTelephone(clientTel)}
         </a>
       )}

@@ -2,6 +2,13 @@
 
 import { useCallback, useState } from 'react'
 
+import {
+  ICONE_NOM,
+  ICONE_NOTE,
+  ICONE_TELEPHONE,
+  IconeChamp,
+  IconeStatut,
+} from '@/components/icones'
 import { IndicateurFileAttente } from '@/components/indicateur-file-attente'
 import type { Creneau } from '@/lib/creneaux'
 import type { StatutOpp } from '@/lib/doublons'
@@ -301,13 +308,16 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
                     className="sr-only"
                   />
                   <span
-                    className={`text-base font-semibold ${
+                    className={`flex items-center gap-2 text-base font-semibold ${
                       actif ? 'text-brand-strong' : 'text-navy'
                     }`}
                   >
+                    {/* L'icône permet de reconnaître le geste avant de lire —
+                        c'est le sélecteur le plus utilisé de l'app. */}
+                    <IconeStatut statut={valeur} className="size-6" />
                     {LIBELLES_STATUT[valeur]}
                   </span>
-                  <span className="text-xs text-grey-text">
+                  <span className="mt-0.5 text-xs text-grey-text">
                     {AIDES_STATUT_CONTACT[valeur]}
                   </span>
                 </label>
@@ -424,7 +434,11 @@ function ChampsClient({
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="client_nom" className="text-sm font-medium text-navy">
+        <label
+          htmlFor="client_nom"
+          className="flex items-center gap-2 text-sm font-semibold text-navy"
+        >
+          <IconeChamp icone={ICONE_NOM} />
           Nom complet{requis && <span aria-hidden> *</span>}
         </label>
         <input
@@ -439,7 +453,11 @@ function ChampsClient({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="client_tel" className="text-sm font-medium text-navy">
+        <label
+          htmlFor="client_tel"
+          className="flex items-center gap-2 text-sm font-semibold text-navy"
+        >
+          <IconeChamp icone={ICONE_TELEPHONE} />
           Téléphone{requis && <span aria-hidden> *</span>}
         </label>
         {/* `type="tel"` + `inputMode="tel"` : clavier numérique au premier tap. */}
@@ -464,7 +482,11 @@ function ChampsClient({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="note" className="text-sm font-medium text-navy">
+        <label
+          htmlFor="note"
+          className="flex items-center gap-2 text-sm font-semibold text-navy"
+        >
+          <IconeChamp icone={ICONE_NOTE} />
           Note
         </label>
         <textarea

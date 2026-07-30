@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
@@ -28,9 +29,7 @@ export default async function PageAdmin() {
                 Créer un compte, changer un rôle, désactiver un accès
               </span>
             </span>
-            <span aria-hidden className="text-grey-text">
-              →
-            </span>
+            <ChevronRight className="size-6 shrink-0 text-grey-text" aria-hidden />
           </Link>
         </li>
 
@@ -48,9 +47,7 @@ export default async function PageAdmin() {
                 knocker
               </span>
             </span>
-            <span aria-hidden className="text-grey-text">
-              →
-            </span>
+            <ChevronRight className="size-6 shrink-0 text-grey-text" aria-hidden />
           </Link>
         </li>
 
@@ -67,9 +64,7 @@ export default async function PageAdmin() {
                 Attribuer une vente à un roofer et confirmer la date
               </span>
             </span>
-            <span aria-hidden className="text-grey-text">
-              →
-            </span>
+            <ChevronRight className="size-6 shrink-0 text-grey-text" aria-hidden />
           </Link>
         </li>
 
@@ -86,9 +81,7 @@ export default async function PageAdmin() {
                 Connecter le compte et associer un calendrier à chaque closer
               </span>
             </span>
-            <span aria-hidden className="text-grey-text">
-              →
-            </span>
+            <ChevronRight className="size-6 shrink-0 text-grey-text" aria-hidden />
           </Link>
         </li>
       </ul>
