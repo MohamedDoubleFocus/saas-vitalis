@@ -41,6 +41,7 @@ export function CarteDessin() {
 
   const refCarte = useRef<HTMLDivElement>(null)
   const refPolygone = useRef<google.maps.Polygon | null>(null)
+  const refChemin = useRef<google.maps.MVCArray<google.maps.LatLng> | null>(null)
   const refInstance = useRef<google.maps.Map | null>(null)
   /** Lu par les écouteurs Google, qui capturent l'état à leur création. */
   const refMode = useRef<'dessin' | 'termine'>('dessin')
@@ -59,8 +60,7 @@ export function CarteDessin() {
   const [erreur, setErreur] = useState<string | null>(null)
 
   /** Recopie le chemin Google dans l'état React. */
-  function relireSommets(polygone: google.maps.Polygon) {
-    const chemin = polygone.getPath()
+  function relireSommets(chemin: google.maps.MVCArray<google.maps.LatLng>) {
     const points: Point[] = []
 
     for (let i = 0; i < chemin.getLength(); i++) {
@@ -92,7 +92,10 @@ export function CarteDessin() {
         'maps',
       )) as google.maps.MapsLibrary
 
-      if (annule || !refCarte.current) return
+      // React réexécute les effets deux fois en développement : sans ce garde,
+      // on créerait deux cartes et surtout DEUX écouteurs de clic, donc deux
+      // sommets par clic.
+      if (annule || !refCarte.current || refInstance.current) return
 
       const carte = new Map(refCarte.current, {
         center: CENTRE_DEFAUT,
@@ -106,10 +109,17 @@ export function CarteDessin() {
 
       refInstance.current = carte
 
-      // Un seul polygone, dont on ne remplace JAMAIS le chemin : `setPath()`
-      // créerait un nouvel objet et les écouteurs ci-dessous seraient perdus.
+      // ⚠️ On construit le chemin NOUS-MÊMES et on le passe au polygone.
+      //
+      // `paths: []` crée un polygone à ZÉRO chemin : `getPath()` renvoie alors
+      // `undefined`, et tout ce qui suit explose. En possédant l'objet, on est
+      // sûr qu'il existe — et on ne le remplace jamais par la suite, car
+      // `setPath()` en créerait un nouveau et les écouteurs ci-dessous seraient
+      // perdus en silence.
+      const chemin = new google.maps.MVCArray<google.maps.LatLng>()
+
       const polygone = new google.maps.Polygon({
-        paths: [],
+        paths: chemin,
         strokeColor: '#0e7ba6',
         strokeWeight: 3,
         fillColor: '#54c3ea',
@@ -119,11 +129,10 @@ export function CarteDessin() {
       })
 
       refPolygone.current = polygone
-
-      const chemin = polygone.getPath()
+      refChemin.current = chemin
 
       for (const evenement of ['set_at', 'insert_at', 'remove_at'] as const) {
-        chemin.addListener(evenement, () => relireSommets(polygone))
+        chemin.addListener(evenement, () => relireSommets(chemin))
       }
 
       carte.addListener('click', (evenement: google.maps.MapMouseEvent) => {
@@ -156,8 +165,9 @@ export function CarteDessin() {
   /** Ferme le tracé et rend les coins déplaçables. */
   function terminer() {
     const polygone = refPolygone.current
+    const chemin = refChemin.current
 
-    if (!polygone || polygone.getPath().getLength() < 3) return
+    if (!polygone || !chemin || chemin.getLength() < 3) return
 
     refMode.current = 'termine'
     setMode('termine')
@@ -171,7 +181,7 @@ export function CarteDessin() {
   }
 
   function annulerDernierPoint() {
-    const chemin = refPolygone.current?.getPath()
+    const chemin = refChemin.current
 
     if (!chemin || chemin.getLength() === 0) return
 
@@ -179,7 +189,7 @@ export function CarteDessin() {
   }
 
   function effacer() {
-    refPolygone.current?.getPath().clear()
+    refChemin.current?.clear()
     reprendre()
   }
 
