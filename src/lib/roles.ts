@@ -1,0 +1,89 @@
+import type { Database } from '@/lib/supabase/database.types'
+
+export type RoleUser = Database['public']['Enums']['role_user']
+
+/** Libellés affichés dans l'interface. */
+export const LIBELLES_ROLES: Record<RoleUser, string> = {
+  knocker: 'Knocker',
+  closer: 'Closer',
+  roofer: 'Couvreur',
+  admin: 'Administrateur',
+}
+
+/** Tous les rôles, dans l'ordre d'affichage des formulaires. */
+export const ROLES: readonly RoleUser[] = ['knocker', 'closer', 'roofer', 'admin']
+
+/**
+ * Page d'accueil de chaque rôle. La racine `/` y redirige, et c'est là
+ * qu'aboutit un utilisateur qui tente d'accéder à une zone qui n'est pas la
+ * sienne.
+ */
+export const ACCUEIL_PAR_ROLE: Record<RoleUser, string> = {
+  knocker: '/terrain/rues',
+  closer: '/terrain/agenda',
+  roofer: '/chantiers',
+  admin: '/admin',
+}
+
+/**
+ * Préfixes de routes accessibles par rôle.
+ *
+ * `knocker` et `closer` partagent le préfixe `/terrain` (zone offline-first,
+ * CLAUDE.md §3) mais pas les mêmes écrans : la garde est donc définie au
+ * niveau de la route, pas de la zone.
+ *
+ * L'admin fait de la « supervision totale » (CLAUDE.md §1) : il atteint tout.
+ */
+const ROUTES_PAR_ROLE: Record<RoleUser, readonly string[]> = {
+  knocker: [
+    '/terrain/rues',
+    '/terrain/lead',
+    '/terrain/meetings',
+    '/terrain/classement',
+  ],
+  closer: ['/terrain/agenda', '/terrain/classement'],
+  roofer: ['/chantiers'],
+  admin: ['/admin', '/terrain', '/chantiers'],
+}
+
+/** Vrai si `chemin` est `prefixe` ou l'un de ses descendants. */
+function souscheminDe(prefixe: string, chemin: string): boolean {
+  return chemin === prefixe || chemin.startsWith(`${prefixe}/`)
+}
+
+export function estRoleUser(valeur: unknown): valeur is RoleUser {
+  return typeof valeur === 'string' && (ROLES as readonly string[]).includes(valeur)
+}
+
+/** Où envoyer cet utilisateur après connexion, ou depuis `/`. */
+export function accueilDuRole(role: RoleUser): string {
+  return ACCUEIL_PAR_ROLE[role]
+}
+
+/** Vrai si ce rôle a le droit d'atteindre ce chemin. */
+export function cheminAutorise(role: RoleUser, chemin: string): boolean {
+  return ROUTES_PAR_ROLE[role].some((prefixe) => souscheminDe(prefixe, chemin))
+}
+
+/**
+ * Destination après connexion : `suivant` s'il s'agit d'un chemin interne que
+ * ce rôle peut atteindre, sinon son accueil.
+ *
+ * Le filtrage protège contre une redirection ouverte : `//evil.com` et
+ * `https://evil.com` sont des URL absolues aux yeux du navigateur.
+ */
+export function destinationApresConnexion(
+  role: RoleUser,
+  suivant: string | null | undefined,
+): string {
+  if (
+    suivant &&
+    suivant.startsWith('/') &&
+    !suivant.startsWith('//') &&
+    cheminAutorise(role, suivant.split('?')[0])
+  ) {
+    return suivant
+  }
+
+  return accueilDuRole(role)
+}

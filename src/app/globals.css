@@ -1,26 +1,32 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ---------------------------------------------------------------------------
+ * Tokens de design — CLAUDE.md §6.
+ * Tailwind v4 dérive les utilitaires du nom de la variable :
+ *   --color-brand   → bg-brand, text-brand, border-brand
+ *   --shadow-card   → shadow-card
+ *   --font-display  → font-display
+ * Aucun thème sombre : outil interne, une seule apparence.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --color-navy: #111418;
+  --color-brand: #54c3ea;
+  --color-brand-hover: #2aa8d6;
+  --color-brand-strong: #0e7ba6;
+  --color-grey-text: #5a6b7b;
+  --color-grey-light: #f4f6f8;
+  --color-grey-border: #e2e8f0;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --shadow-card:
+    0 2px 4px -1px rgba(10, 14, 22, 0.06), 0 12px 28px -8px rgba(10, 14, 22, 0.16);
+  --shadow-cta: 0 8px 20px rgba(84, 195, 234, 0.32);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-grey-light);
+  color: var(--color-navy);
+  font-family: var(--font-sans);
 }
