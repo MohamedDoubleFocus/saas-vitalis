@@ -10,7 +10,11 @@
  */
 
 /** Mutations que la file sait porter. */
-export type TypeMutation = 'maj_territoire_complete' | 'creation_lead'
+export type TypeMutation =
+  | 'maj_territoire_complete'
+  | 'creation_lead'
+  | 'close_vente'
+  | 'maj_statut_rdv'
 
 export type Mutation = {
   id: string
@@ -60,7 +64,38 @@ export function cleFusion(mutation: Mutation): string | null {
       : null
   }
 
+  // Une vente corrigée avant d'être partie remplace la précédente : deux closes
+  // en attente sur le même rendez-vous décriraient le même contrat, dont seul le
+  // dernier état compte. `conclure_vente()` est de toute façon idempotente en
+  // base — la fusion évite juste un aller-retour inutile.
+  if (mutation.type === 'close_vente') {
+    const charge = mutation.charge as { opportuniteId?: unknown }
+
+    return typeof charge?.opportuniteId === 'string'
+      ? `close_vente:${charge.opportuniteId}`
+      : null
+  }
+
+  // Idem : seul le dernier statut choisi compte.
+  if (mutation.type === 'maj_statut_rdv') {
+    const charge = mutation.charge as { opportuniteId?: unknown }
+
+    return typeof charge?.opportuniteId === 'string'
+      ? `maj_statut_rdv:${charge.opportuniteId}`
+      : null
+  }
+
   return null
+}
+
+/** Clé de fusion d'un close, pour savoir si une vente attend encore. */
+export function cleClose(opportuniteId: string): string {
+  return `close_vente:${opportuniteId}`
+}
+
+/** Clé de fusion d'un changement de statut de rendez-vous. */
+export function cleStatutRdv(opportuniteId: string): string {
+  return `maj_statut_rdv:${opportuniteId}`
 }
 
 /**

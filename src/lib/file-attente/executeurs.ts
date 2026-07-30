@@ -266,6 +266,177 @@ async function enregistrerLead(chargeBrute: unknown): Promise<void> {
 
 /* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/* close_vente                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/** Un volet, tel qu'attendu par `conclure_vente()`. */
+export type VoletAEnvoyer = {
+  type: string
+  produit_gonano: string | null
+  deuxieme_couche_fortify: boolean
+  montant: number
+}
+
+export type ExtraAEnvoyer = {
+  description: string
+  montant: number
+}
+
+export type ChargeCloseVente = {
+  opportuniteId: string
+  clientNom: string
+  clientTel: string
+  clientCourriel: string
+  superficiePi2: number | null
+  depotRecu: number
+  dateCibleDebut: string | null
+  dateCibleFin: string | null
+  volets: VoletAEnvoyer[]
+  extras: ExtraAEnvoyer[]
+  /** Ce que le schéma ne sait pas stocker (couleur des bardeaux), joint à la note. */
+  precisions: string | null
+}
+
+function lireChargeClose(charge: unknown): ChargeCloseVente {
+  const c = charge as Partial<ChargeCloseVente> | null
+
+  if (typeof c?.opportuniteId !== 'string' || !c.opportuniteId) {
+    throw new Error('Charge invalide : rendez-vous manquant.')
+  }
+
+  if (!Array.isArray(c.volets) || !Array.isArray(c.extras)) {
+    throw new Error('Charge invalide : volets ou extras manquants.')
+  }
+
+  return {
+    opportuniteId: c.opportuniteId,
+    clientNom: String(c.clientNom ?? ''),
+    clientTel: String(c.clientTel ?? ''),
+    clientCourriel: String(c.clientCourriel ?? ''),
+    superficiePi2: nombreOuNull(c.superficiePi2),
+    depotRecu: nombreOuNull(c.depotRecu) ?? 0,
+    dateCibleDebut: texteOuNull(c.dateCibleDebut),
+    dateCibleFin: texteOuNull(c.dateCibleFin),
+    volets: c.volets,
+    extras: c.extras,
+    precisions: texteOuNull(c.precisions),
+  }
+}
+
+/**
+ * Rétablit la nullabilité d'un argument de fonction Postgres.
+ *
+ * `supabase gen types` ne modélise pas la nullabilité des ARGUMENTS : il déclare
+ * `p_superficie_pi2: number` et `p_date_cible_debut: string` alors que la
+ * fonction accepte `NULL` pour les deux (seuls les paramètres munis d'un
+ * `default` deviennent optionnels côté TypeScript).
+ *
+ * Envoyer `0` pi² ou une date bidon pour contourner le typage écrirait une
+ * fausse donnée en base. On garde donc `null` et on corrige le type ici.
+ */
+function argNullable<T>(valeur: T | null): T {
+  return valeur as T
+}
+
+/**
+ * Conclut la vente via la fonction `conclure_vente()`.
+ *
+ * UN seul appel : les quatre tables sont écrites dans une transaction Postgres.
+ * Une coupure réseau ne peut donc pas laisser une vente à moitié enregistrée —
+ * soit le serveur a tout validé, soit rien n'a bougé et la file rejouera.
+ *
+ * La fonction est `security invoker` : ce sont les politiques du module 1 qui
+ * autorisent ou refusent, pas elle.
+ */
+async function closeVente(chargeBrute: unknown): Promise<void> {
+  const charge = lireChargeClose(chargeBrute)
+
+  const supabase = createClient()
+
+  const { error } = await supabase.rpc('conclure_vente', {
+    p_opportunite_id: charge.opportuniteId,
+    p_client_nom: charge.clientNom,
+    p_client_tel: charge.clientTel,
+    p_client_courriel: charge.clientCourriel,
+    p_superficie_pi2: argNullable(charge.superficiePi2),
+    p_depot_recu: charge.depotRecu,
+    p_date_cible_debut: argNullable(charge.dateCibleDebut),
+    p_date_cible_fin: argNullable(charge.dateCibleFin),
+    p_volets: charge.volets,
+    p_extras: charge.extras,
+    // Muni d'un `default null` en SQL, donc optionnel côté types : on l'omet
+    // plutôt que de passer `null`.
+    p_precisions: charge.precisions ?? undefined,
+  })
+
+  if (error) throw new Error(error.message)
+}
+
+/* -------------------------------------------------------------------------- */
+/* maj_statut_rdv                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type ChargeMajStatutRdv = {
+  opportuniteId: string
+  statut: StatutOpp
+  /** Motif saisi par le closer, joint à la note système. */
+  motif: string | null
+}
+
+/**
+ * Rendez-vous non conclu : le closer passe l'opportunité à `perdu` ou la renvoie
+ * à `repasser`.
+ *
+ * Deux écritures, mais sans enjeu d'atomicité comparable au close : si la note
+ * manquait, seule la piste d'audit serait incomplète, pas le contrat. La lecture
+ * préalable du statut rend l'opération idempotente — un rejeu de la file ne
+ * réécrit pas la note.
+ */
+async function majStatutRdv(chargeBrute: unknown): Promise<void> {
+  const c = chargeBrute as Partial<ChargeMajStatutRdv> | null
+
+  if (typeof c?.opportuniteId !== 'string' || !c.opportuniteId) {
+    throw new Error('Charge invalide : rendez-vous manquant.')
+  }
+
+  if (c.statut !== 'perdu' && c.statut !== 'repasser') {
+    throw new Error('Charge invalide : statut de clôture inattendu.')
+  }
+
+  const statut = c.statut
+  const motif = texteOuNull(c.motif)
+  const supabase = createClient()
+
+  const { data: existante, error: erreurLecture } = await supabase
+    .from('opportunites')
+    .select('statut')
+    .eq('id', c.opportuniteId)
+    .single()
+
+  if (erreurLecture) throw new Error(erreurLecture.message)
+
+  // Déjà dans l'état voulu : rien à faire, et surtout pas de note en double.
+  if (existante.statut === statut) return
+
+  const { error } = await supabase
+    .from('opportunites')
+    .update({ statut })
+    .eq('id', c.opportuniteId)
+
+  if (error) throw new Error(error.message)
+
+  const libelle = statut === 'perdu' ? 'Rendez-vous perdu' : 'Rendez-vous à repasser'
+
+  await ajouterNote(
+    c.opportuniteId,
+    motif ? `${libelle} — ${motif}` : `${libelle}.`,
+    'Système',
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
 export async function executer(mutation: Mutation): Promise<void> {
   switch (mutation.type) {
     case 'maj_territoire_complete':
@@ -273,5 +444,11 @@ export async function executer(mutation: Mutation): Promise<void> {
 
     case 'creation_lead':
       return enregistrerLead(mutation.charge)
+
+    case 'close_vente':
+      return closeVente(mutation.charge)
+
+    case 'maj_statut_rdv':
+      return majStatutRdv(mutation.charge)
   }
 }

@@ -243,6 +243,13 @@ export type Database = {
             foreignKeyName: "opportunites_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunites_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -250,7 +257,21 @@ export type Database = {
             foreignKeyName: "opportunites_knocker_id_fkey"
             columns: ["knocker_id"]
             isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunites_knocker_id_fkey"
+            columns: ["knocker_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunites_roofer_id_fkey"
+            columns: ["roofer_id"]
+            isOneToOne: false
+            referencedRelation: "annuaire_profils"
             referencedColumns: ["id"]
           },
           {
@@ -328,6 +349,13 @@ export type Database = {
             foreignKeyName: "profiles_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -363,6 +391,13 @@ export type Database = {
             foreignKeyName: "territoires_knocker_id_fkey"
             columns: ["knocker_id"]
             isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territoires_knocker_id_fkey"
+            columns: ["knocker_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -376,10 +411,36 @@ export type Database = {
           nom_complet: string | null
           role: Database["public"]["Enums"]["role_user"] | null
         }
+        Insert: {
+          id?: string | null
+          nom_complet?: string | null
+          role?: Database["public"]["Enums"]["role_user"] | null
+        }
+        Update: {
+          id?: string | null
+          nom_complet?: string | null
+          role?: Database["public"]["Enums"]["role_user"] | null
+        }
         Relationships: []
       }
     }
     Functions: {
+      conclure_vente: {
+        Args: {
+          p_client_courriel: string
+          p_client_nom: string
+          p_client_tel: string
+          p_date_cible_debut: string
+          p_date_cible_fin: string
+          p_depot_recu: number
+          p_extras: Json
+          p_opportunite_id: string
+          p_precisions?: string
+          p_superficie_pi2: number
+          p_volets: Json
+        }
+        Returns: number
+      }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       est_admin: { Args: never; Returns: boolean }
       peut_modifier_opportunite: {
