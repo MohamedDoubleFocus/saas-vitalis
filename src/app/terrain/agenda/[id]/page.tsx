@@ -25,6 +25,7 @@ import {
 } from '@/lib/vente'
 
 import { ActionsRdv } from './actions-rdv'
+import { SynchroGoogle } from './synchro-google'
 
 export const metadata: Metadata = {
   title: 'Rendez-vous — Vitalis',
@@ -52,7 +53,7 @@ export default async function PageDetailRdv({ params }: Props) {
   const { data: opportunite } = await supabase
     .from('opportunites')
     .select(
-      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, client_courriel, statut, date_rdv, nb_visites, derniere_visite, knocker_id, montant_contrat, depot_recu, superficie_pi2, date_cible_debut, date_cible_fin, vendu_le',
+      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, client_courriel, statut, date_rdv, nb_visites, derniere_visite, knocker_id, google_event_id, montant_contrat, depot_recu, superficie_pi2, date_cible_debut, date_cible_fin, vendu_le',
     )
     .eq('id', id)
     .maybeSingle()
@@ -138,6 +139,14 @@ export default async function PageDetailRdv({ params }: Props) {
             </p>
           )}
         </section>
+
+        {/* --- Google Agenda ----------------------------------------------- */}
+        {dateRdv && (
+          <SynchroGoogle
+            opportuniteId={opportunite.id}
+            evenementId={opportunite.google_event_id}
+          />
+        )}
 
         {/* --- Le client --------------------------------------------------- */}
         <section className="rounded-2xl bg-white p-4 shadow-card">
