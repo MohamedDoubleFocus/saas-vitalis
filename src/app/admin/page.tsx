@@ -36,6 +36,26 @@ export default async function PageAdmin() {
 
         <li>
           <Link
+            href="/admin/secteurs"
+            className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-card transition-colors hover:bg-grey-light"
+          >
+            <span>
+              <span className="block font-display text-base font-semibold text-navy">
+                Secteurs
+              </span>
+              <span className="block text-sm text-grey-text">
+                Tracer une zone sur la carte, importer ses rues, l’attribuer à un
+                knocker
+              </span>
+            </span>
+            <span aria-hidden className="text-grey-text">
+              →
+            </span>
+          </Link>
+        </li>
+
+        <li>
+          <Link
             href="/admin/assignation"
             className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-card transition-colors hover:bg-grey-light"
           >

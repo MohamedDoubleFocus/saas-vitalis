@@ -20,7 +20,7 @@ export type ConfigDisponibilites = {
   heureFin: number
   /** Durée d'un rendez-vous, en minutes. */
   dureeMinutes: number
-  /** Jours ouvrés — 0 = dimanche … 6 = samedi. */
+  /** Jours travaillés — 0 = dimanche … 6 = samedi. */
   joursOuvres: readonly number[]
   /** Nombre de jours proposés, aujourd'hui compris. */
   joursAvance: number
@@ -40,7 +40,8 @@ export const CONFIG_DISPONIBILITES: ConfigDisponibilites = {
   heureDebut: 9,
   heureFin: 20,
   dureeMinutes: 60,
-  joursOuvres: [1, 2, 3, 4, 5],
+  // 7 jours sur 7 : les closers travaillent aussi le week-end.
+  joursOuvres: [0, 1, 2, 3, 4, 5, 6],
   joursAvance: 7,
   delaiMinimumMinutes: 90,
 }

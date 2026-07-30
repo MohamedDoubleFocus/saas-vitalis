@@ -391,32 +391,123 @@ export type Database = {
           },
         ]
       }
+      secteurs: {
+        Row: {
+          created_at: string
+          cree_par: string | null
+          id: string
+          knocker_id: string | null
+          nom: string
+          notes: string | null
+          polygone: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cree_par?: string | null
+          id?: string
+          knocker_id?: string | null
+          nom: string
+          notes?: string | null
+          polygone: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cree_par?: string | null
+          id?: string
+          knocker_id?: string | null
+          nom?: string
+          notes?: string | null
+          polygone?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "secteurs_cree_par_fkey"
+            columns: ["cree_par"]
+            isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "secteurs_cree_par_fkey"
+            columns: ["cree_par"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "secteurs_knocker_id_fkey"
+            columns: ["knocker_id"]
+            isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "secteurs_knocker_id_fkey"
+            columns: ["knocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       territoires: {
         Row: {
           complete: boolean
+          complete_le: string | null
+          complete_par: string | null
           created_at: string
+          geometrie: Json | null
           id: string
           knocker_id: string | null
+          nom_normalise: string | null
           nom_rue: string
+          secteur_id: string | null
           ville: string | null
         }
         Insert: {
           complete?: boolean
+          complete_le?: string | null
+          complete_par?: string | null
           created_at?: string
+          geometrie?: Json | null
           id?: string
           knocker_id?: string | null
+          nom_normalise?: string | null
           nom_rue: string
+          secteur_id?: string | null
           ville?: string | null
         }
         Update: {
           complete?: boolean
+          complete_le?: string | null
+          complete_par?: string | null
           created_at?: string
+          geometrie?: Json | null
           id?: string
           knocker_id?: string | null
+          nom_normalise?: string | null
           nom_rue?: string
+          secteur_id?: string | null
           ville?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "territoires_complete_par_fkey"
+            columns: ["complete_par"]
+            isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territoires_complete_par_fkey"
+            columns: ["complete_par"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "territoires_knocker_id_fkey"
             columns: ["knocker_id"]
@@ -429,6 +520,13 @@ export type Database = {
             columns: ["knocker_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territoires_secteur_id_fkey"
+            columns: ["secteur_id"]
+            isOneToOne: false
+            referencedRelation: "secteurs"
             referencedColumns: ["id"]
           },
         ]

@@ -63,7 +63,11 @@ export function chargerPlaces(): Promise<void> {
     const script = document.createElement('script')
     const parametres = new URLSearchParams({
       key: cle,
-      libraries: 'places',
+      // Les trois bibliothèques utilisées par l'app, chargées en une fois :
+      // `places` pour l'autocomplete du lead, `drawing` pour tracer un secteur,
+      // `geometry` pour les tracés de rues. Un seul script pour toute l'app
+      // évite deux chargements concurrents du SDK, que Google refuse.
+      libraries: 'places,drawing,geometry',
       language: 'fr-CA',
       region: 'CA',
       loading: 'async',

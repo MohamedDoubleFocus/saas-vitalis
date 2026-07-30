@@ -37,8 +37,12 @@ export type ConfigCreneaux = {
  * modifier pour changer l'offre de créneaux de toute l'app.
  */
 export const CONFIG_CRENEAUX: ConfigCreneaux = {
-  heures: [17, 18, 19],
-  joursOuvres: [1, 2, 3, 4, 5],
+  // 9 h à 19 h : le dernier rendez-vous commence à 19 h et finit à 20 h.
+  // Mêmes bornes que `CONFIG_DISPONIBILITES` (module 2.5), pour que le repli
+  // ressemble à ce que le knocker voit d'habitude.
+  heures: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+  // 7 jours sur 7 : les closers travaillent aussi le week-end.
+  joursOuvres: [0, 1, 2, 3, 4, 5, 6],
   joursAvance: 7,
   delaiMinimumMinutes: 90,
 }

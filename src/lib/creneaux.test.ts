@@ -17,11 +17,10 @@ function local(annee: number, mois: number, jour: number, heure = 0, minute = 0)
 const LUNDI_MATIN = local(2026, 8, 3, 9, 0)
 
 describe('genererCreneaux', () => {
-  it('propose les heures configurées sur les jours ouvrés', () => {
+  it('propose les heures configurées, à l’heure pile', () => {
     const creneaux = genererCreneaux(LUNDI_MATIN)
 
-    // Lundi → vendredi = 5 jours ouvrés sur les 7 proposés, × 3 heures.
-    expect(creneaux).toHaveLength(15)
+    expect(creneaux.length).toBeGreaterThan(0)
 
     for (const creneau of creneaux) {
       expect(CONFIG_CRENEAUX.heures).toContain(creneau.debut.getHours())
@@ -30,11 +29,21 @@ describe('genererCreneaux', () => {
     }
   })
 
-  it('exclut samedi et dimanche', () => {
-    const creneaux = genererCreneaux(LUNDI_MATIN)
+  it('couvre la semaine entière, week-end compris', () => {
+    // Les closers travaillent 7 jours sur 7.
+    const jours = new Set(genererCreneaux(LUNDI_MATIN).map((c) => c.debut.getDay()))
 
-    expect(creneaux.some((c) => c.debut.getDay() === 0)).toBe(false)
-    expect(creneaux.some((c) => c.debut.getDay() === 6)).toBe(false)
+    expect(jours.size).toBe(7)
+    expect(jours.has(6)).toBe(true) // samedi
+    expect(jours.has(0)).toBe(true) // dimanche
+  })
+
+  it('couvre 9 h à 19 h, dernier rendez-vous fini à 20 h', () => {
+    const heures = genererCreneaux(LUNDI_MATIN)
+      .filter((c) => c.jour === '2026-08-04')
+      .map((c) => c.debut.getHours())
+
+    expect(heures).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
   })
 
   it('reste en ordre chronologique', () => {
@@ -45,8 +54,8 @@ describe('genererCreneaux', () => {
   })
 
   it('respecte le délai minimum', () => {
-    // 16 h 15 : 17 h est dans 45 min, sous le plancher de 90 min → écarté.
-    // 18 h et 19 h passent.
+    // 16 h 15 + 90 min de plancher = 17 h 45 : 17 h est écarté, 18 h et 19 h
+    // passent.
     const creneaux = genererCreneaux(local(2026, 8, 3, 16, 15))
     const aujourdhui = creneaux.filter((c) => c.jour === '2026-08-03')
 
@@ -66,7 +75,8 @@ describe('genererCreneaux', () => {
     const ids = creneaux.map((c) => c.id)
 
     expect(new Set(ids).size).toBe(ids.length)
-    expect(ids[0]).toBe('2026-08-03T17')
+    // 9 h + 90 min de plancher : le premier créneau du jour est 11 h.
+    expect(ids[0]).toBe('2026-08-03T11')
 
     // Deux appels au même instant donnent les mêmes identifiants : indispensable
     // pour qu'un `key` React ou une valeur de formulaire reste valable.
@@ -105,9 +115,11 @@ describe('grouperParJournee', () => {
   it('regroupe en conservant l’ordre des journées', () => {
     const journees = grouperParJournee(genererCreneaux(LUNDI_MATIN), LUNDI_MATIN)
 
-    expect(journees).toHaveLength(5)
+    expect(journees).toHaveLength(7)
     expect(journees[0].jour).toBe('2026-08-03')
-    expect(journees[0].creneaux).toHaveLength(3)
+    // Aujourd'hui commence à 11 h à cause du plancher ; demain est complet.
+    expect(journees[0].creneaux).toHaveLength(9)
+    expect(journees[1].creneaux).toHaveLength(11)
     expect(journees.map((j) => j.jour)).toEqual([...journees.map((j) => j.jour)].sort())
   })
 
@@ -128,7 +140,7 @@ describe('libelleCreneau', () => {
   it('affiche l’heure du créneau', () => {
     const [premier] = genererCreneaux(LUNDI_MATIN)
 
-    expect(libelleCreneau(premier)).toContain('17')
+    expect(libelleCreneau(premier)).toContain('11')
   })
 })
 
