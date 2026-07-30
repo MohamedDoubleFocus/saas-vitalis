@@ -98,10 +98,41 @@ Exigences réelles :
 - Interactions **zéro-JS-client par défaut** : confirmations via un dépliant `<details>` en deux temps, pas de modale. On ne passe en Client Component que sans équivalent serveur (ex. capture/compression photo). Exception assumée : la zone terrain est client par nature (saisie instantanée, file d'attente).
 - **Transitions de statut d'une seule étape** à la fois (avant ou arrière), chacune journalisée.
 
+### Lisibilité en extérieur — non négociable
+
+L'app se lit **dehors, au soleil, sur un téléphone tenu à bout de bras, parfois avec des gants**. C'est le cas d'usage dimensionnant, pas le confort d'un écran de bureau.
+
+- **Plancher absolu : 14px.** Aucun texte fonctionnel ne descend en dessous, nulle part. `text-xs` **est** ce plancher — il n'existe rien sous lui dans l'échelle.
+- **Corps de texte à 16px** (`text-sm`). Le `text-xs` est réservé aux métadonnées accessoires (horodatages, mentions secondaires).
+- **Les valeurs qui portent l'information ressortent** : montants, dates de rendez-vous, noms de client, compteurs et scores en `text-2xl` gras. Un knocker doit lire un montant sans s'arrêter.
+- **Contraste minimum AAA (7:1)** pour tout texte de la zone terrain. `grey-text` a été foncé exprès : le `#5a6b7b` d'origine ne donnait que 5,1:1 sur le fond de l'app — conforme AA, illisible sur un toit.
+- Zone gestion : le même contraste s'applique, mais la densité peut être un peu plus forte (desktop, intérieur).
+
+### Icônes
+
+- **Une seule librairie : `lucide-react`.** Ne jamais mélanger avec des glyphes typographiques (`☏`, `➤`, `→`) : ils ne s'alignent pas, ne se colorent pas pareil et disparaissent au soleil.
+- **Une notion, une icône.** Les correspondances vivent dans `src/components/icones.tsx` — statuts, rôles, champs de formulaire. Le même statut porte la même forme sur tous les écrans, sinon l'icône n'apprend rien.
+- **Taille minimale 20px** (`size-5`) dans le texte, **24 à 28px** (`size-6`/`size-7`) pour la navigation et les actions principales. La cible tactile reste ≥44px, mais l'icône *visible* à l'intérieur doit être grande.
+- **Jamais plus pâle que le texte voisin.** Les icônes héritent de `currentColor` : elles prennent la couleur du texte qui les entoure, donc `navy` ou `grey-text`, jamais un gris décoratif.
+- **`aria-hidden` systématique** quand un libellé accompagne l'icône — sinon un lecteur d'écran annonce l'information deux fois.
+- **Sobriété** : une icône qui n'aide pas à reconnaître plus vite est du bruit.
+
 ### Tokens de design
-- Couleurs : `navy #111418` · `brand #54c3ea` (`brand-hover #2aa8d6`, `brand-strong #0e7ba6`) · `grey-text #5a6b7b` · `grey-light #f4f6f8` · `grey-border #e2e8f0`.
+- Couleurs : `navy #111418` · `brand #54c3ea` (`brand-hover #2aa8d6`, `brand-strong #0e7ba6`) · `grey-text #3f4f60` · `grey-light #f4f6f8` · `grey-border #e2e8f0`.
 - **`brand` est réservé aux actions et au statut « Confirmée »** — pas pour les statuts passifs, il perd son signal.
 - Police : **Figtree** (`next/font/google`, variable `--font-figtree`), display + sans.
+- Échelle typographique (définie dans `@theme`, jamais en dur dans un écran) :
+
+| Utilitaire | Taille | Usage |
+|---|---|---|
+| `text-xs` | 14px | plancher — métadonnées uniquement |
+| `text-sm` | 16px | corps de texte |
+| `text-base` | 18px | champs de saisie, titres de carte |
+| `text-lg` | 22px | titres de section |
+| `text-xl` | 26px | |
+| `text-2xl` | 32px | valeurs à faire ressortir |
+| `text-3xl` | 40px | |
+
 - Ombres :
   - `shadow-card` : `0 2px 4px -1px rgba(10,14,22,.06), 0 12px 28px -8px rgba(10,14,22,.16)`
   - `shadow-cta` : `0 8px 20px rgba(84,195,234,.32)`

@@ -63,11 +63,14 @@ export function chargerPlaces(): Promise<void> {
     const script = document.createElement('script')
     const parametres = new URLSearchParams({
       key: cle,
-      // Les trois bibliothèques utilisées par l'app, chargées en une fois :
-      // `places` pour l'autocomplete du lead, `drawing` pour tracer un secteur,
-      // `geometry` pour les tracés de rues. Un seul script pour toute l'app
-      // évite deux chargements concurrents du SDK, que Google refuse.
-      libraries: 'places,drawing,geometry',
+      // ⚠️ PAS de `drawing` : `DrawingManager` a été RETIRÉ de l'API Maps en
+      // v3.65 (https://developers.google.com/maps/deprecations). Le tracé de
+      // secteur est fait à la main dans `carte-dessin.tsx`.
+      //
+      // `maps` n'a pas besoin d'être listé : `importLibrary('maps')` le charge à
+      // la demande. Un seul script pour toute l'app évite deux chargements
+      // concurrents du SDK, que Google refuse.
+      libraries: 'places',
       language: 'fr-CA',
       region: 'CA',
       loading: 'async',
