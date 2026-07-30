@@ -133,20 +133,87 @@ export function libelleCreneau(creneau: Creneau): string {
 }
 
 /**
- * Source des créneaux — **le point de bascule du module 2.5**.
+ * D'où viennent les créneaux affichés.
  *
- * Signature volontairement asynchrone et paramétrée par le closer, alors que
- * l'implémentation actuelle n'a besoin ni de l'un ni de l'autre : le jour où les
- * créneaux viendront du Google Agenda du closer, seul ce corps changera.
+ * - `google` : lus dans l'agenda réel du closer, les heures prises sont exclues.
+ * - `repli`  : créneaux fixes, parce que Google est injoignable ou que le closer
+ *   n'a pas de calendrier associé. Ils peuvent proposer une heure déjà prise —
+ *   l'écran doit le dire.
  */
+export type SourceCreneauxUtilisee = 'google' | 'repli'
+
+export type ResultatCreneaux = {
+  creneaux: Creneau[]
+  source: SourceCreneauxUtilisee
+}
+
 export type SourceCreneaux = (
   closerId: string | null,
   maintenant: Date,
-) => Promise<Creneau[]>
+) => Promise<ResultatCreneaux>
 
+function versCreneau(iso: string): Creneau | null {
+  const debut = new Date(iso)
+
+  if (Number.isNaN(debut.getTime())) return null
+
+  const jour = jourLocalIso(debut)
+
+  return {
+    id: `${jour}T${String(debut.getHours()).padStart(2, '0')}`,
+    debut,
+    jour,
+  }
+}
+
+/**
+ * Source des créneaux — **branchée sur le Google Agenda du closer**.
+ *
+ * L'appel passe par `/api/creneaux` : lire l'agenda exige le jeton du compte
+ * Google, donc le serveur. Le jeton ne descend jamais ici.
+ *
+ * Tout échec — réseau coupé, Google en panne, route indisponible — retombe sur
+ * les créneaux fixes plutôt que de laisser le knocker sans rien à proposer
+ * devant le client (CLAUDE.md §5).
+ */
 export const obtenirCreneaux: SourceCreneaux = async (closerId, maintenant) => {
-  // `closerId` sera utilisé au module 2.5 pour interroger l'agenda du closer.
-  void closerId
+  const repli = (): ResultatCreneaux => ({
+    creneaux: genererCreneaux(maintenant),
+    source: 'repli',
+  })
 
-  return genererCreneaux(maintenant)
+  if (typeof fetch === 'undefined') return repli()
+
+  try {
+    const parametres = new URLSearchParams()
+
+    if (closerId) parametres.set('closer', closerId)
+
+    const reponse = await fetch(`/api/creneaux?${parametres.toString()}`, {
+      cache: 'no-store',
+    })
+
+    if (!reponse.ok) return repli()
+
+    const donnees = (await reponse.json()) as {
+      source?: unknown
+      creneaux?: unknown
+    }
+
+    if (!Array.isArray(donnees.creneaux)) return repli()
+
+    const creneaux = donnees.creneaux
+      .filter((valeur): valeur is string => typeof valeur === 'string')
+      .map(versCreneau)
+      .filter((creneau): creneau is Creneau => creneau !== null)
+
+    // Le serveur a répondu mais n'a rien de libre : c'est une information, pas
+    // une panne. On ne substitue pas des créneaux fixes qui seraient faux.
+    return {
+      creneaux,
+      source: donnees.source === 'google' ? 'google' : 'repli',
+    }
+  } catch {
+    return repli()
+  }
 }

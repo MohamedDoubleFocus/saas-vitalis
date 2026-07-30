@@ -8,6 +8,7 @@ import {
   obtenirCreneaux,
   type Creneau,
   type JourneeCreneaux,
+  type SourceCreneauxUtilisee,
 } from '@/lib/creneaux'
 
 type Props = {
@@ -34,15 +35,19 @@ export function ChoixPlage({
 }: Props) {
   const [journees, setJournees] = useState<JourneeCreneaux[] | null>(null)
   const [choisi, setChoisi] = useState<Creneau | null>(null)
+  const [source, setSource] = useState<SourceCreneauxUtilisee>('google')
 
   useEffect(() => {
     let annule = false
 
     void (async () => {
       const maintenant = new Date()
-      const creneaux = await obtenirCreneaux(closerId, maintenant)
+      const resultat = await obtenirCreneaux(closerId, maintenant)
 
-      if (!annule) setJournees(grouperParJournee(creneaux, maintenant))
+      if (annule) return
+
+      setJournees(grouperParJournee(resultat.creneaux, maintenant))
+      setSource(resultat.source)
     })()
 
     return () => {
@@ -66,6 +71,18 @@ export function ChoixPlage({
         >
           Aucun closer ne t’est rattaché. Le rendez-vous sera enregistré sans
           closer — demande à un administrateur de te rattacher.
+        </p>
+      )}
+
+      {/* Les créneaux ne viennent pas de l'agenda réel : le dire, sinon le
+          knocker book de bonne foi sur une heure déjà prise. */}
+      {journees !== null && source === 'repli' && (
+        <p
+          role="status"
+          className="rounded-lg border border-grey-border bg-grey-light px-3 py-2 text-sm text-grey-text"
+        >
+          Agenda du closer non consulté — horaires standards affichés. Confirme
+          la plage avec lui après le rendez-vous.
         </p>
       )}
 

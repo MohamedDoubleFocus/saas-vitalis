@@ -160,6 +160,29 @@ async function ajouterNote(
   }
 }
 
+/**
+ * Demande au serveur de créer l'événement Google du rendez-vous.
+ *
+ * Volontairement **sans conséquence en cas d'échec** : le rendez-vous est déjà
+ * en base, et le jeton Google ne peut vivre que côté serveur. Si l'appel rate —
+ * hors ligne, Google en panne, calendrier non associé — `google_event_id` reste
+ * NULL, ce qui sert de marqueur pour une resynchronisation ultérieure.
+ *
+ * On ne lève jamais : faire échouer la mutation ferait réessayer la création du
+ * lead lui-même, alors qu'elle a réussi.
+ */
+async function synchroniserEvenementGoogle(opportuniteId: string): Promise<void> {
+  try {
+    await fetch('/api/rdv/evenement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opportuniteId }),
+    })
+  } catch {
+    // Silencieux par conception — voir le commentaire ci-dessus.
+  }
+}
+
 async function creerLead(charge: ChargeCreationLead): Promise<void> {
   const supabase = createClient()
 
@@ -186,6 +209,10 @@ async function creerLead(charge: ChargeCreationLead): Promise<void> {
   if (error) throw new Error(error.message)
 
   await ajouterNote(data.id, charge.note, 'Knocker')
+
+  if (charge.dateRdv) {
+    await synchroniserEvenementGoogle(data.id)
+  }
 }
 
 /**
@@ -252,6 +279,10 @@ async function majLead(charge: ChargeCreationLead & { opportuniteId: string }): 
   }
 
   await ajouterNote(charge.opportuniteId, charge.note, 'Knocker')
+
+  if (charge.dateRdv) {
+    await synchroniserEvenementGoogle(charge.opportuniteId)
+  }
 }
 
 async function enregistrerLead(chargeBrute: unknown): Promise<void> {

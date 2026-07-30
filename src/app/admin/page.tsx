@@ -52,6 +52,25 @@ export default async function PageAdmin() {
             </span>
           </Link>
         </li>
+
+        <li>
+          <Link
+            href="/admin/google"
+            className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-card transition-colors hover:bg-grey-light"
+          >
+            <span>
+              <span className="block font-display text-base font-semibold text-navy">
+                Google Calendar
+              </span>
+              <span className="block text-sm text-grey-text">
+                Connecter le compte et associer un calendrier à chaque closer
+              </span>
+            </span>
+            <span aria-hidden className="text-grey-text">
+              →
+            </span>
+          </Link>
+        </li>
       </ul>
 
       <p className="mt-6 text-xs text-grey-text">

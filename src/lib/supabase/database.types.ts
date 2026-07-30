@@ -74,6 +74,33 @@ export type Database = {
           },
         ]
       }
+      google_credentials: {
+        Row: {
+          connecte_le: string
+          courriel: string | null
+          id: string
+          maj_le: string
+          portee: string | null
+          refresh_token: string
+        }
+        Insert: {
+          connecte_le?: string
+          courriel?: string | null
+          id?: string
+          maj_le?: string
+          portee?: string | null
+          refresh_token: string
+        }
+        Update: {
+          connecte_le?: string
+          courriel?: string | null
+          id?: string
+          maj_le?: string
+          portee?: string | null
+          refresh_token?: string
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           auteur: string | null
@@ -324,6 +351,7 @@ export type Database = {
           actif: boolean
           closer_id: string | null
           created_at: string
+          google_calendar_id: string | null
           id: string
           nom_complet: string | null
           role: Database["public"]["Enums"]["role_user"]
@@ -332,6 +360,7 @@ export type Database = {
           actif?: boolean
           closer_id?: string | null
           created_at?: string
+          google_calendar_id?: string | null
           id: string
           nom_complet?: string | null
           role: Database["public"]["Enums"]["role_user"]
@@ -340,6 +369,7 @@ export type Database = {
           actif?: boolean
           closer_id?: string | null
           created_at?: string
+          google_calendar_id?: string | null
           id?: string
           nom_complet?: string | null
           role?: Database["public"]["Enums"]["role_user"]

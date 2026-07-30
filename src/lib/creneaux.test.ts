@@ -133,18 +133,112 @@ describe('libelleCreneau', () => {
 })
 
 describe('obtenirCreneaux', () => {
-  it('est la source unique consommée par l’UI', async () => {
-    const parLaSource = await obtenirCreneaux('closer-1', LUNDI_MATIN)
+  /** Remplace `fetch` le temps d'un test, puis le restaure. */
+  async function avecFetch<T>(
+    faux: typeof globalThis.fetch,
+    executer: () => Promise<T>,
+  ): Promise<T> {
+    const original = globalThis.fetch
+    globalThis.fetch = faux
 
-    expect(parLaSource.map((c) => c.id)).toEqual(
+    try {
+      return await executer()
+    } finally {
+      globalThis.fetch = original
+    }
+  }
+
+  function reponseJson(corps: unknown, ok = true) {
+    return {
+      ok,
+      json: async () => corps,
+    } as Response
+  }
+
+  it('convertit les créneaux renvoyés par le serveur', async () => {
+    const debut = local(2026, 8, 3, 17)
+
+    const resultat = await avecFetch(
+      async () =>
+        reponseJson({ source: 'google', creneaux: [debut.toISOString()] }),
+      () => obtenirCreneaux('closer-1', LUNDI_MATIN),
+    )
+
+    expect(resultat.source).toBe('google')
+    expect(resultat.creneaux).toHaveLength(1)
+    expect(resultat.creneaux[0].debut.getTime()).toBe(debut.getTime())
+    expect(resultat.creneaux[0].id).toBe('2026-08-03T17')
+  })
+
+  it('respecte une réponse vide sans la remplacer par des créneaux fixes', async () => {
+    // Agenda plein : proposer des heures fixes serait proposer des heures prises.
+    const resultat = await avecFetch(
+      async () => reponseJson({ source: 'google', creneaux: [] }),
+      () => obtenirCreneaux('closer-1', LUNDI_MATIN),
+    )
+
+    expect(resultat.creneaux).toEqual([])
+    expect(resultat.source).toBe('google')
+  })
+
+  it('replie sur les créneaux fixes quand le serveur répond en erreur', async () => {
+    const resultat = await avecFetch(
+      async () => reponseJson({}, false),
+      () => obtenirCreneaux('closer-1', LUNDI_MATIN),
+    )
+
+    expect(resultat.source).toBe('repli')
+    expect(resultat.creneaux.map((c) => c.id)).toEqual(
       genererCreneaux(LUNDI_MATIN).map((c) => c.id),
     )
   })
 
-  it('ne dépend pas encore du closer, mais accepte déjà son identifiant', async () => {
-    const avec = await obtenirCreneaux('closer-1', LUNDI_MATIN)
-    const sans = await obtenirCreneaux(null, LUNDI_MATIN)
+  it('replie quand le réseau échoue — jamais de vente bloquée à la porte', async () => {
+    const resultat = await avecFetch(
+      async () => {
+        throw new Error('Failed to fetch')
+      },
+      () => obtenirCreneaux('closer-1', LUNDI_MATIN),
+    )
 
-    expect(avec.map((c) => c.id)).toEqual(sans.map((c) => c.id))
+    expect(resultat.source).toBe('repli')
+    expect(resultat.creneaux.length).toBeGreaterThan(0)
+  })
+
+  it('replie sur une charge malformée', async () => {
+    const resultat = await avecFetch(
+      async () => reponseJson({ source: 'google', creneaux: 'pas un tableau' }),
+      () => obtenirCreneaux('closer-1', LUNDI_MATIN),
+    )
+
+    expect(resultat.source).toBe('repli')
+  })
+
+  it('ignore les dates illisibles au lieu de tout perdre', async () => {
+    const resultat = await avecFetch(
+      async () =>
+        reponseJson({
+          source: 'google',
+          creneaux: ['pas une date', local(2026, 8, 3, 18).toISOString()],
+        }),
+      () => obtenirCreneaux('closer-1', LUNDI_MATIN),
+    )
+
+    expect(resultat.creneaux).toHaveLength(1)
+    expect(resultat.creneaux[0].debut.getHours()).toBe(18)
+  })
+
+  it('transmet le closer au serveur', async () => {
+    let urlAppelee = ''
+
+    await avecFetch(
+      async (entree) => {
+        urlAppelee = String(entree)
+        return reponseJson({ source: 'google', creneaux: [] })
+      },
+      () => obtenirCreneaux('closer-42', LUNDI_MATIN),
+    )
+
+    expect(urlAppelee).toContain('closer=closer-42')
   })
 })

@@ -29,7 +29,12 @@ export const config = {
      * - `sw.js`      : le service worker lui-même
      * - `manifest.webmanifest` : le manifest PWA
      * - `hors-ligne` : la page de secours, préchargée par le service worker
+     *
+     * `api` est exclu aussi, mais pour une autre raison : la garde de zone
+     * redirigerait un knocker appelant `/api/creneaux` vers son accueil, et le
+     * `fetch` recevrait du HTML au lieu de JSON. CHAQUE handler de `/api`
+     * s'authentifie donc lui-même et répond 401/403 en JSON.
      */
-    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|hors-ligne|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|hors-ligne|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }
