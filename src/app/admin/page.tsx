@@ -33,6 +33,25 @@ export default async function PageAdmin() {
             </span>
           </Link>
         </li>
+
+        <li>
+          <Link
+            href="/admin/assignation"
+            className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-card transition-colors hover:bg-grey-light"
+          >
+            <span>
+              <span className="block font-display text-base font-semibold text-navy">
+                Assignation des chantiers
+              </span>
+              <span className="block text-sm text-grey-text">
+                Attribuer une vente à un roofer et confirmer la date
+              </span>
+            </span>
+            <span aria-hidden className="text-grey-text">
+              →
+            </span>
+          </Link>
+        </li>
       </ul>
 
       <p className="mt-6 text-xs text-grey-text">

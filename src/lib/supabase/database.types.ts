@@ -443,6 +443,7 @@ export type Database = {
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       est_admin: { Args: never; Returns: boolean }
+      opportunite_du_chemin: { Args: { chemin: string }; Returns: string }
       peut_modifier_opportunite: {
         Args: { p_opportunite_id: string }
         Returns: boolean
