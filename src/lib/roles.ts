@@ -38,6 +38,7 @@ const ROUTES_PAR_ROLE: Record<RoleUser, readonly string[]> = {
   knocker: [
     '/terrain/rues',
     '/terrain/lead',
+    '/terrain/portes',
     '/terrain/meetings',
     '/terrain/classement',
   ],

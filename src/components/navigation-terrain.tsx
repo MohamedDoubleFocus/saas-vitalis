@@ -1,6 +1,6 @@
 'use client'
 
-import { CalendarClock, Map, Plus, Trophy } from 'lucide-react'
+import { CalendarClock, DoorClosed, Map, Plus, Trophy } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -23,15 +23,22 @@ type Onglet = {
   icone: LucideIcon
 }
 
+/**
+ * Libellés courts, pas des abréviations de confort : avec quatre onglets ET le
+ * bouton central, une cible fait ~73 px sur un écran de 375 px. « Classement » y
+ * déborderait ou passerait sous le plancher de 14 px (CLAUDE.md §6). Le titre
+ * complet reste en haut de chaque écran.
+ */
 const ONGLETS_KNOCKER: readonly Onglet[] = [
   { href: '/terrain/rues', libelle: 'Rues', icone: Map },
-  { href: '/terrain/meetings', libelle: 'Meetings', icone: CalendarClock },
-  { href: '/terrain/classement', libelle: 'Classement', icone: Trophy },
+  { href: '/terrain/portes', libelle: 'Portes', icone: DoorClosed },
+  { href: '/terrain/meetings', libelle: 'RDV', icone: CalendarClock },
+  { href: '/terrain/classement', libelle: 'Podium', icone: Trophy },
 ]
 
 const ONGLETS_CLOSER: readonly Onglet[] = [
   { href: '/terrain/agenda', libelle: 'Agenda', icone: CalendarClock },
-  { href: '/terrain/classement', libelle: 'Classement', icone: Trophy },
+  { href: '/terrain/classement', libelle: 'Podium', icone: Trophy },
 ]
 
 function ongletsPour(role: RoleUser): readonly Onglet[] {
@@ -60,7 +67,9 @@ export function NavigationTerrain({ role }: { role: RoleUser }) {
       // mangerait sinon les cibles tactiles du bas.
       className="fixed inset-x-0 bottom-0 z-20 border-t border-grey-border bg-white pb-[env(safe-area-inset-bottom)]"
     >
-      <ul className="mx-auto flex max-w-[440px] items-stretch justify-around px-2">
+      {/* `px-1` et non `px-2` : avec cinq cibles, chaque pixel rendu au bord est
+          un pixel gagné sur la largeur d'un onglet. */}
+      <ul className="mx-auto flex max-w-[440px] items-stretch justify-around px-1">
         {onglets.map((onglet) => {
           const actif = estActif(chemin, onglet.href)
           const Icone = onglet.icone
@@ -72,7 +81,7 @@ export function NavigationTerrain({ role }: { role: RoleUser }) {
                 aria-current={actif ? 'page' : undefined}
                 // Inactif en `grey-text` (contraste AAA) et non en gris pâle :
                 // un onglet non sélectionné doit rester lisible au soleil.
-                className={`flex min-h-16 flex-col items-center justify-center gap-1 px-1 py-1.5 text-xs font-semibold transition-colors ${
+                className={`flex min-h-16 flex-col items-center justify-center gap-1 px-0.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
                   actif ? 'text-brand-strong' : 'text-grey-text'
                 }`}
               >

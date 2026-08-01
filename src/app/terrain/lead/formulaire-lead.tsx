@@ -18,7 +18,7 @@ import type { ChargeCreationLead } from '@/lib/file-attente/executeurs'
 import { useFileAttente } from '@/lib/file-attente/fournisseur'
 import type { AdresseSelectionnee } from '@/lib/google-places'
 import { AIDES_STATUT_CONTACT, LIBELLES_STATUT, STATUTS_CONTACT } from '@/lib/statuts'
-import { estTelephoneValide, versE164 } from '@/lib/telephone'
+import { estTelephoneValide, formaterTelephone, versE164 } from '@/lib/telephone'
 
 import { ChampAdresse } from './champ-adresse'
 import { ChoixPlage } from './choix-plage'
@@ -35,36 +35,75 @@ type EtatDoublon =
   /** Hors ligne ou base injoignable : on laisse passer sans bloquer (§5). */
   | { statut: 'indisponible' }
 
+/**
+ * Une porte déjà cognée, ouverte depuis « Mes portes » pour être re-cognée.
+ *
+ * Chargée côté serveur et garantie appartenir au knocker courant : c'est ce qui
+ * autorise à écrire dans l'opportunité existante plutôt que d'en créer une
+ * seconde à la même adresse.
+ */
+export type PortePrechargee = {
+  id: string
+  adresse: AdresseSelectionnee
+  clientNom: string | null
+  clientTel: string | null
+  statutPrecedent: StatutOpp
+  nbVisites: number
+  derniereVisite: string
+}
+
 type Props = {
   knockerId: string
   closerId: string | null
+  porte?: PortePrechargee | null
 }
 
-export function FormulaireLead({ knockerId, closerId }: Props) {
+export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
   const { envoyer, enLigne } = useFileAttente()
 
   const [etape, setEtape] = useState<Etape>('saisie')
-  const [adresse, setAdresse] = useState<AdresseSelectionnee | null>(null)
+  const [adresse, setAdresse] = useState<AdresseSelectionnee | null>(
+    porte?.adresse ?? null,
+  )
   const [doublon, setDoublon] = useState<EtatDoublon>({ statut: 'aucun' })
   const [statut, setStatut] = useState<StatutOpp>('absent')
-  const [clientNom, setClientNom] = useState('')
-  const [clientTel, setClientTel] = useState('')
+  const [clientNom, setClientNom] = useState(porte?.clientNom ?? '')
+  // Affiché en format lisible : le knocker doit pouvoir relire le numéro à voix
+  // haute pour le confirmer, pas déchiffrer un E.164.
+  const [clientTel, setClientTel] = useState(
+    porte?.clientTel ? formaterTelephone(porte.clientTel) : '',
+  )
   const [note, setNote] = useState('')
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
+
+  /**
+   * Porte existante sur laquelle on écrit, tant que l'adresse n'a pas changé.
+   *
+   * Dès que le knocker choisit une autre adresse, ce lien tombe : on ne veut
+   * surtout pas écraser l'adresse d'une opportunité voisine.
+   */
+  const [porteEnCours, setPorteEnCours] = useState<PortePrechargee | null>(porte)
 
   /**
    * Instant du coup de porte, figé à la sélection de l'adresse.
    *
    * C'est lui qui devient `derniere_visite`, pas l'heure d'envoi : une mutation
    * partie vingt minutes plus tard ne doit pas fausser la métrique.
+   *
+   * Sur un re-cognage l'adresse est déjà connue : l'instant est celui de
+   * l'ouverture de l'écran, c'est-à-dire du moment où le knocker est à la porte.
    */
-  const [saisiLe, setSaisiLe] = useState<string | null>(null)
+  const [saisiLe, setSaisiLe] = useState<string | null>(
+    porte ? new Date().toISOString() : null,
+  )
 
   const choisirAdresse = useCallback(
     async (choisie: AdresseSelectionnee | null) => {
       setAdresse(choisie)
       setErreur(null)
+      // Changer d'adresse, c'est changer de porte.
+      setPorteEnCours(null)
 
       if (!choisie) {
         setDoublon({ statut: 'aucun' })
@@ -134,9 +173,10 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
     // (`opportunites_update_knocker`) refuse la ligne d'un collègue. Sur la porte
     // d'un autre knocker, on enregistre sa propre opportunité.
     const opportuniteId =
-      doublon.statut === 'trouve' && doublon.accepte && doublon.doublon.estLaMienne
+      porteEnCours?.id ??
+      (doublon.statut === 'trouve' && doublon.accepte && doublon.doublon.estLaMienne
         ? doublon.doublon.opportunite.id
-        : null
+        : null)
 
     const charge: ChargeCreationLead = {
       opportuniteId,
@@ -171,6 +211,7 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
     setEtape('saisie')
     setAdresse(null)
     setDoublon({ statut: 'aucun' })
+    setPorteEnCours(null)
     setStatut('absent')
     setClientNom('')
     setClientTel('')
@@ -250,6 +291,9 @@ export function FormulaireLead({ knockerId, closerId }: Props) {
       {/* 1. Adresse */}
       <section className="rounded-2xl bg-white p-4 shadow-card">
         <h2 className="font-display text-base font-semibold text-navy">Adresse</h2>
+
+        {porteEnCours && <RappelPorte porte={porteEnCours} />}
+
         <div className="mt-3">
           <ChampAdresse
             adresseChoisie={adresse}
@@ -498,6 +542,31 @@ function ChampsClient({
         />
       </div>
     </>
+  )
+}
+
+/**
+ * Rappel de ce qu'on sait déjà de la porte qu'on re-cogne.
+ *
+ * Ce n'est pas une alerte : ici le knocker a choisi cette porte exprès. Le bloc
+ * lui redonne le contexte (dernier résultat, ancienneté, nombre de visites) juste
+ * avant qu'il ne saisisse le résultat du jour.
+ */
+function RappelPorte({ porte }: { porte: PortePrechargee }) {
+  const visite = lireDate(porte.derniereVisite)
+
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-lg border border-grey-border bg-grey-light p-3">
+      <IconeStatut statut={porte.statutPrecedent} className="mt-0.5 size-5 text-grey-text" />
+      <p className="text-sm text-navy">
+        <strong className="font-semibold">
+          {LIBELLES_STATUT[porte.statutPrecedent]}
+        </strong>
+        {visite ? ` le ${formaterDateHeure(visite)}` : ''} — {porte.nbVisites}{' '}
+        {porte.nbVisites === 1 ? 'visite' : 'visites'}. Cette visite s’ajoutera à
+        la porte existante.
+      </p>
+    </div>
   )
 }
 
