@@ -26,6 +26,21 @@ export const ACCUEIL_PAR_ROLE: Record<RoleUser, string> = {
 }
 
 /**
+ * Manager : une CASQUETTE, pas un rôle.
+ *
+ * `est_manager` se cumule avec `role`. Aujourd'hui Billal est closer ET manager ;
+ * demain quelqu'un pourra être l'un sans l'autre. Le routage doit donc composer
+ * les deux au lieu de choisir.
+ */
+export const ROUTES_MANAGER: readonly string[] = ['/accueil', '/equipe']
+
+/** Hub d'accueil des utilisateurs à deux casquettes. */
+export const HUB = '/accueil'
+
+/** Tableau de bord d'équipe. */
+export const ACCUEIL_MANAGER = '/equipe'
+
+/**
  * Préfixes de routes accessibles par rôle.
  *
  * `knocker` et `closer` partagent le préfixe `/terrain` (zone offline-first,
@@ -44,7 +59,7 @@ const ROUTES_PAR_ROLE: Record<RoleUser, readonly string[]> = {
   ],
   closer: ['/terrain/agenda', '/terrain/classement'],
   roofer: ['/chantiers'],
-  admin: ['/admin', '/terrain', '/chantiers'],
+  admin: ['/admin', '/terrain', '/chantiers', '/accueil', '/equipe'],
 }
 
 /** Vrai si `chemin` est `prefixe` ou l'un de ses descendants. */
@@ -56,14 +71,41 @@ export function estRoleUser(valeur: unknown): valeur is RoleUser {
   return typeof valeur === 'string' && (ROLES as readonly string[]).includes(valeur)
 }
 
-/** Où envoyer cet utilisateur après connexion, ou depuis `/`. */
-export function accueilDuRole(role: RoleUser): string {
-  return ACCUEIL_PAR_ROLE[role]
+/**
+ * Où envoyer cet utilisateur après connexion, ou depuis `/`.
+ *
+ * Trois cas, dans cet ordre :
+ *   1. Admin — il supervise déjà tout, sa console reste son point d'entrée ;
+ *   2. Closer ET manager — deux métiers distincts dans la même journée, aucun
+ *      des deux n'est « le vrai » : le hub laisse choisir ;
+ *   3. Manager sans être closer — une seule casquette, on y va directement.
+ *
+ * Un utilisateur sans casquette de manager retrouve exactement son accueil
+ * d'avant : rien ne change pour lui.
+ */
+export function accueilDuRole(role: RoleUser, estManager = false): string {
+  if (role === 'admin') return ACCUEIL_PAR_ROLE.admin
+  if (!estManager) return ACCUEIL_PAR_ROLE[role]
+
+  return role === 'closer' ? HUB : ACCUEIL_MANAGER
 }
 
-/** Vrai si ce rôle a le droit d'atteindre ce chemin. */
-export function cheminAutorise(role: RoleUser, chemin: string): boolean {
-  return ROUTES_PAR_ROLE[role].some((prefixe) => souscheminDe(prefixe, chemin))
+/**
+ * Vrai si cet utilisateur a le droit d'atteindre ce chemin.
+ *
+ * La casquette de manager AJOUTE des routes, elle n'en retire aucune : un closer
+ * manager garde l'accès complet à son agenda.
+ */
+export function cheminAutorise(
+  role: RoleUser,
+  chemin: string,
+  estManager = false,
+): boolean {
+  const prefixes = estManager
+    ? [...ROUTES_PAR_ROLE[role], ...ROUTES_MANAGER]
+    : ROUTES_PAR_ROLE[role]
+
+  return prefixes.some((prefixe) => souscheminDe(prefixe, chemin))
 }
 
 /**
@@ -76,15 +118,16 @@ export function cheminAutorise(role: RoleUser, chemin: string): boolean {
 export function destinationApresConnexion(
   role: RoleUser,
   suivant: string | null | undefined,
+  estManager = false,
 ): string {
   if (
     suivant &&
     suivant.startsWith('/') &&
     !suivant.startsWith('//') &&
-    cheminAutorise(role, suivant.split('?')[0])
+    cheminAutorise(role, suivant.split('?')[0], estManager)
   ) {
     return suivant
   }
 
-  return accueilDuRole(role)
+  return accueilDuRole(role, estManager)
 }

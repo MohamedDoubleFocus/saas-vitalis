@@ -35,7 +35,7 @@ export async function login(formData: FormData) {
 
   const { data: profil } = await supabase
     .from('profiles')
-    .select('role, actif')
+    .select('role, actif, est_manager')
     .eq('id', data.user.id)
     .maybeSingle()
 
@@ -52,7 +52,9 @@ export async function login(formData: FormData) {
     redirect('/login?error=compte_desactive')
   }
 
-  redirect(destinationApresConnexion(profil.role, suivant))
+  // La casquette de manager est lue en base ici, et non dans le jeton : celui-ci
+  // vient juste d'être émis, mais l'appelant n'y a pas accès à cet instant.
+  redirect(destinationApresConnexion(profil.role, suivant, profil.est_manager))
 }
 
 export async function signOut() {

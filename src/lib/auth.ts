@@ -11,6 +11,8 @@ export type SessionApp = {
   role: RoleUser
   /** Closer rattaché (knocker uniquement), sinon `null`. */
   closerId: string | null
+  /** Casquette de manager, cumulable avec le rôle. */
+  estManager: boolean
 }
 
 export type ProfilCourant = SessionApp & {
@@ -57,13 +59,18 @@ export async function sessionCourante(): Promise<SessionApp | null> {
       userId,
       role: lecture.claims.role,
       closerId: lecture.claims.closerId,
+      // Claim absente = jeton antérieur à la migration manager. On ne va
+      // chercher QUE cette colonne, et seulement le temps que les jetons
+      // tournent (une heure au plus).
+      estManager:
+        lecture.claims.estManager ?? (await lireEstManager(supabase, userId)),
     }
   }
 
   // Repli : le hook n'est pas (encore) actif.
   const { data: profil } = await supabase
     .from('profiles')
-    .select('role, actif, closer_id')
+    .select('role, actif, closer_id, est_manager')
     .eq('id', userId)
     .maybeSingle()
 
@@ -73,7 +80,28 @@ export async function sessionCourante(): Promise<SessionApp | null> {
     userId,
     role: profil.role,
     closerId: profil.closer_id,
+    estManager: profil.est_manager,
   }
+}
+
+/**
+ * Lit la seule colonne `est_manager`, pour les jetons émis avant la migration.
+ *
+ * En cas d'échec de lecture on renvoie `false` : mieux vaut afficher un écran de
+ * moins que d'ouvrir la vue d'une équipe sur une erreur réseau. La RLS, elle,
+ * refuserait de toute façon les données.
+ */
+async function lireEstManager(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('est_manager')
+    .eq('id', userId)
+    .maybeSingle()
+
+  return data?.est_manager ?? false
 }
 
 /**
@@ -95,7 +123,7 @@ export async function profilCourant(): Promise<ProfilCourant | null> {
 
   const { data: profil } = await supabase
     .from('profiles')
-    .select('role, actif, closer_id, nom_complet')
+    .select('role, actif, closer_id, nom_complet, est_manager')
     .eq('id', userId)
     .maybeSingle()
 
@@ -105,6 +133,7 @@ export async function profilCourant(): Promise<ProfilCourant | null> {
     userId,
     role: profil.role,
     closerId: profil.closer_id,
+    estManager: profil.est_manager,
     nomComplet: profil.nom_complet,
   }
 }
@@ -120,7 +149,31 @@ export async function exigerAdmin(): Promise<SessionApp> {
   const session = await sessionCourante()
 
   if (!session) redirect('/login?error=session')
-  if (session.role !== 'admin') redirect(accueilDuRole(session.role))
+  if (session.role !== 'admin') {
+    redirect(accueilDuRole(session.role, session.estManager))
+  }
+
+  return session
+}
+
+/**
+ * Exige un manager actif (ou un admin), sinon renvoie l'utilisateur chez lui.
+ *
+ * À appeler au début de chaque écran d'équipe. Le proxy garde déjà la zone, mais
+ * une page est un point d'entrée HTTP à part entière : elle se défend seule.
+ *
+ * Ce n'est PAS ce qui protège les données — c'est la RLS
+ * (`opportunites_select_manager`) qui décide ce que le manager peut lire. Ici on
+ * ne fait qu'éviter d'afficher un écran vide à qui n'a rien à y faire.
+ */
+export async function exigerManager(): Promise<SessionApp> {
+  const session = await sessionCourante()
+
+  if (!session) redirect('/login?error=session')
+
+  if (!session.estManager && session.role !== 'admin') {
+    redirect(accueilDuRole(session.role, session.estManager))
+  }
 
   return session
 }

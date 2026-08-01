@@ -11,5 +11,5 @@ import { accueilDuRole } from '@/lib/roles'
  */
 export default async function Racine() {
   const session = await sessionCourante()
-  redirect(session ? accueilDuRole(session.role) : '/login')
+  redirect(session ? accueilDuRole(session.role, session.estManager) : '/login')
 }

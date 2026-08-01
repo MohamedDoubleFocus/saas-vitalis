@@ -14,6 +14,64 @@ describe('accueilDuRole', () => {
     expect(accueilDuRole('roofer')).toBe('/chantiers')
     expect(accueilDuRole('admin')).toBe('/admin')
   })
+
+  it('envoie un closer manager sur le hub — deux casquettes, aucune n’est « la vraie »', () => {
+    expect(accueilDuRole('closer', true)).toBe('/accueil')
+  })
+
+  it('envoie un manager non closer directement sur son équipe', () => {
+    expect(accueilDuRole('knocker', true)).toBe('/equipe')
+    expect(accueilDuRole('roofer', true)).toBe('/equipe')
+  })
+
+  it('laisse l’admin dans sa console même s’il est manager', () => {
+    expect(accueilDuRole('admin', true)).toBe('/admin')
+  })
+})
+
+describe('cheminAutorise — casquette manager', () => {
+  it('ouvre le hub et la zone équipe au manager', () => {
+    expect(cheminAutorise('closer', '/equipe', true)).toBe(true)
+    expect(cheminAutorise('closer', '/equipe/abc-123', true)).toBe(true)
+    expect(cheminAutorise('closer', '/accueil', true)).toBe(true)
+  })
+
+  it('les ferme à qui n’est pas manager', () => {
+    expect(cheminAutorise('closer', '/equipe', false)).toBe(false)
+    expect(cheminAutorise('closer', '/accueil', false)).toBe(false)
+    expect(cheminAutorise('knocker', '/equipe', false)).toBe(false)
+  })
+
+  it('AJOUTE des routes sans en retirer : le closer manager garde son agenda', () => {
+    expect(cheminAutorise('closer', '/terrain/agenda', true)).toBe(true)
+    expect(cheminAutorise('closer', '/terrain/classement', true)).toBe(true)
+  })
+
+  it('n’élargit pas le reste : un knocker manager ne devient pas closer', () => {
+    expect(cheminAutorise('knocker', '/terrain/agenda', true)).toBe(false)
+    expect(cheminAutorise('knocker', '/admin', true)).toBe(false)
+  })
+
+  it('l’admin atteint la zone équipe sans casquette', () => {
+    expect(cheminAutorise('admin', '/equipe', false)).toBe(true)
+    expect(cheminAutorise('admin', '/accueil', false)).toBe(true)
+  })
+
+  it('ne confond pas un préfixe avec un chemin voisin', () => {
+    expect(cheminAutorise('closer', '/equipements', true)).toBe(false)
+  })
+})
+
+describe('destinationApresConnexion — casquette manager', () => {
+  it('respecte une destination d’équipe demandée par un manager', () => {
+    expect(destinationApresConnexion('closer', '/equipe', true)).toBe('/equipe')
+  })
+
+  it('renvoie un non-manager sur son accueil plutôt que sur l’équipe', () => {
+    expect(destinationApresConnexion('closer', '/equipe', false)).toBe(
+      '/terrain/agenda',
+    )
+  })
 })
 
 describe('cheminAutorise', () => {

@@ -50,6 +50,29 @@ async function closerValide(closerId: string | null): Promise<boolean> {
 }
 
 /**
+ * Vérifie qu'un `manager_id` désigne bien un manager actif.
+ *
+ * Même raison que `closerValide` : un `<select>` se falsifie. Sans cette
+ * vérification, un knocker pourrait être rattaché à quelqu'un qui n'a pas la
+ * casquette — et son équipe n'apparaîtrait nulle part.
+ */
+async function managerValide(managerId: string | null): Promise<boolean> {
+  if (!managerId) return true
+
+  const admin = createAdminClient()
+
+  const { data } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('id', managerId)
+    .eq('est_manager', true)
+    .eq('actif', true)
+    .maybeSingle()
+
+  return data !== null
+}
+
+/**
  * Crée un compte auth + son profil.
  *
  * Se fait avec la clé `service_role` : un admin n'a aucun droit sur
@@ -82,9 +105,14 @@ export async function creerUtilisateur(formData: FormData) {
   // affiche le champ en permanence (interactions zéro-JS, CLAUDE.md §6) : c'est
   // ici qu'on le neutralise pour les autres rôles.
   const closerId = role === 'knocker' ? texteOuNull(formData.get('closer_id')) : null
+  const managerId = role === 'knocker' ? texteOuNull(formData.get('manager_id')) : null
 
   if (!(await closerValide(closerId))) {
     redirect(`${CHEMIN}?error=closer_invalide`)
+  }
+
+  if (!(await managerValide(managerId))) {
+    redirect(`${CHEMIN}?error=manager_invalide`)
   }
 
   const admin = createAdminClient()
@@ -107,6 +135,7 @@ export async function creerUtilisateur(formData: FormData) {
     nom_complet: nomComplet,
     role,
     closer_id: closerId,
+    manager_id: managerId,
   })
 
   if (erreurProfil) {
@@ -226,6 +255,119 @@ export async function modifierNumeroOpenPhone(formData: FormData) {
 
   revalidatePath(CHEMIN)
   redirect(`${CHEMIN}?ok=${numero ? 'numero_enregistre' : 'numero_retire'}`)
+}
+
+/**
+ * Donne ou retire la casquette de manager.
+ *
+ * `est_manager` se cumule avec le rôle : un closer manager reste closer. La
+ * casquette voyage dans le JWT — elle ne prendra effet dans le routage qu'au
+ * prochain renouvellement du jeton de l'intéressé (une heure au plus), ou tout
+ * de suite s'il se reconnecte. La RLS, elle, lit la base : ses droits de lecture
+ * sur son équipe sont immédiats.
+ */
+export async function basculerManager(formData: FormData) {
+  await exigerAdmin()
+
+  const profilId = texteOuNull(formData.get('profil_id'))
+  const estManager = formData.get('est_manager') === 'true'
+
+  if (!profilId) {
+    redirect(`${CHEMIN}?error=champs_manquants`)
+  }
+
+  const supabase = await createClient()
+
+  const { data: cible } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profilId)
+    .maybeSingle()
+
+  if (!cible) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ est_manager: estManager })
+    .eq('id', profilId)
+
+  if (error) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  // Retirer la casquette laisserait des knockers rattachés à un ex-manager :
+  // `est_manager_de()` renverrait faux et l'équipe deviendrait invisible sans
+  // que rien ne le dise. On détache donc explicitement.
+  if (!estManager) {
+    const { error: erreurDetachement } = await supabase
+      .from('profiles')
+      .update({ manager_id: null })
+      .eq('manager_id', profilId)
+
+    if (erreurDetachement) {
+      redirect(`${CHEMIN}?error=detachement_partiel`)
+    }
+  }
+
+  revalidatePath(CHEMIN)
+  redirect(`${CHEMIN}?ok=${estManager ? 'manager_ajoute' : 'manager_retire'}`)
+}
+
+/**
+ * Change le manager qui supervise un knocker (ou le détache).
+ *
+ * Volontairement distinct de `modifierCloser` : `closer_id` dit POUR QUI le
+ * knocker booke, `manager_id` dit QUI le supervise. Les deux pointent vers
+ * Billal aujourd'hui, mais rien ne les oblige à rester alignés.
+ */
+export async function modifierManager(formData: FormData) {
+  await exigerAdmin()
+
+  const profilId = texteOuNull(formData.get('profil_id'))
+  const managerId = texteOuNull(formData.get('manager_id'))
+
+  if (!profilId) {
+    redirect(`${CHEMIN}?error=champs_manquants`)
+  }
+
+  // Doublé par la contrainte `profiles_manager_id_pas_soi_meme`.
+  if (managerId === profilId) {
+    redirect(`${CHEMIN}?error=manager_invalide`)
+  }
+
+  const supabase = await createClient()
+
+  const { data: cible } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profilId)
+    .maybeSingle()
+
+  if (!cible) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  if (cible.role !== 'knocker') {
+    redirect(`${CHEMIN}?error=pas_un_knocker`)
+  }
+
+  if (!(await managerValide(managerId))) {
+    redirect(`${CHEMIN}?error=manager_invalide`)
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ manager_id: managerId })
+    .eq('id', profilId)
+
+  if (error) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  revalidatePath(CHEMIN)
+  redirect(`${CHEMIN}?ok=${managerId ? 'manager_change' : 'manager_retire_knocker'}`)
 }
 
 /**

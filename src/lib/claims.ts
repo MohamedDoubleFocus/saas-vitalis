@@ -8,6 +8,15 @@ export type ClaimsVitalis = {
   role: RoleUser
   closerId: string | null
   actif: boolean
+  /**
+   * Casquette de manager, cumulable avec le rôle.
+   *
+   * `null` = **la claim est absente**, pas « faux » : le jeton a été émis avant
+   * la migration manager. L'appelant doit alors lire `profiles.est_manager`.
+   * Confondre les deux enverrait Billal sur son agenda de closer au lieu de son
+   * hub, pendant l'heure de vie du jeton.
+   */
+  estManager: boolean | null
 }
 
 /**
@@ -66,6 +75,11 @@ export function lireClaimsVitalis(
       role: roleBrut,
       closerId: typeof claims.closer_id === 'string' ? claims.closer_id : null,
       actif: claims.actif,
+      // Contrairement à `actif`, une claim `est_manager` manquante ne justifie
+      // pas de replier sur toute la lecture de `profiles` : le reste du jeton
+      // est bon. On signale l'absence, et l'appelant ne va chercher QUE cette
+      // valeur en base — repli qui disparaît au premier renouvellement du jeton.
+      estManager: typeof claims.est_manager === 'boolean' ? claims.est_manager : null,
     },
   }
 }

@@ -26,7 +26,7 @@ export default async function LayoutTerrain({
           carte de chaque liste passe sous la navigation. */}
       <div className="flex flex-1 flex-col pb-24">{children}</div>
 
-      <NavigationTerrain role={session.role} />
+      <NavigationTerrain role={session.role} estManager={session.estManager} />
     </FournisseurFileAttente>
   )
 }

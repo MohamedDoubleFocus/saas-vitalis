@@ -15,7 +15,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'knocker', closerId: 'c-9', actif: true },
+      claims: { role: 'knocker', closerId: 'c-9', actif: true, estManager: null },
     })
   })
 
@@ -29,7 +29,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'admin', closerId: null, actif: true },
+      claims: { role: 'admin', closerId: null, actif: true, estManager: null },
     })
   })
 
@@ -43,7 +43,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'roofer', closerId: null, actif: false },
+      claims: { role: 'roofer', closerId: null, actif: false, estManager: null },
     })
   })
 
@@ -77,6 +77,53 @@ describe('lireClaimsVitalis', () => {
     expect(lireClaimsVitalis({})).toEqual({ statut: 'absent' })
   })
 
+  it('lit la casquette de manager quand le jeton la porte', () => {
+    const r = lireClaimsVitalis({
+      ...BASE,
+      role_vitalis: 'closer',
+      closer_id: null,
+      actif: true,
+      est_manager: true,
+    })
+
+    expect(r).toEqual({
+      statut: 'ok',
+      claims: { role: 'closer', closerId: null, actif: true, estManager: true },
+    })
+  })
+
+  it('distingue « pas manager » de « claim absente »', () => {
+    // Faux explicite : le jeton est postérieur à la migration manager.
+    expect(
+      lireClaimsVitalis({
+        ...BASE,
+        role_vitalis: 'closer',
+        actif: true,
+        est_manager: false,
+      }),
+    ).toEqual({
+      statut: 'ok',
+      claims: { role: 'closer', closerId: null, actif: true, estManager: false },
+    })
+
+    // Absente ou du mauvais type : `null`, pas `false`. Le reste du jeton reste
+    // exploitable — seule cette valeur ira se chercher en base.
+    expect(
+      lireClaimsVitalis({ ...BASE, role_vitalis: 'closer', actif: true }).statut,
+    ).toBe('ok')
+    expect(
+      lireClaimsVitalis({
+        ...BASE,
+        role_vitalis: 'closer',
+        actif: true,
+        est_manager: 'oui',
+      }),
+    ).toEqual({
+      statut: 'ok',
+      claims: { role: 'closer', closerId: null, actif: true, estManager: null },
+    })
+  })
+
   it('ignore un closer_id du mauvais type au lieu d’échouer', () => {
     const r = lireClaimsVitalis({
       ...BASE,
@@ -87,7 +134,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'knocker', closerId: null, actif: true },
+      claims: { role: 'knocker', closerId: null, actif: true, estManager: null },
     })
   })
 })

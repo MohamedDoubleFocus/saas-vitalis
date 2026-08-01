@@ -1,3 +1,4 @@
+import { UsersRound } from 'lucide-react'
 import type { Metadata } from 'next'
 
 import { CadrePage } from '@/components/cadre-page'
@@ -10,8 +11,10 @@ import { formaterTelephone } from '@/lib/telephone'
 
 import {
   basculerActif,
+  basculerManager,
   creerUtilisateur,
   modifierCloser,
+  modifierManager,
   modifierNumeroOpenPhone,
 } from './actions'
 
@@ -29,10 +32,12 @@ type ProfilListe = {
   role: RoleUser
   actif: boolean
   closer_id: string | null
+  manager_id: string | null
+  est_manager: boolean
   openphone_number: string | null
 }
 
-/** Option de rattachement : un closer proposable dans les `<select>`. */
+/** Option de rattachement proposable dans un `<select>` (closer ou manager). */
 type OptionCloser = {
   id: string
   libelle: string
@@ -49,7 +54,11 @@ const MESSAGES_ERREUR: Record<string, string> = {
   auto_desactivation: 'Tu ne peux pas désactiver ton propre compte.',
   maj_impossible: 'La mise à jour a échoué. Réessaie.',
   closer_invalide: 'Closer invalide. Choisis un closer actif dans la liste.',
-  pas_un_knocker: 'Seul un knocker peut être rattaché à un closer.',
+  manager_invalide:
+    'Manager invalide. Coche d’abord « Manager » sur la personne concernée, puis réessaie.',
+  detachement_partiel:
+    'La casquette de manager a été retirée, mais ses knockers n’ont pas pu être détachés. Réassigne-les à la main.',
+  pas_un_knocker: 'Seul un knocker peut être rattaché à un closer ou à un manager.',
   pas_un_closer: 'Seul un closer peut avoir un numéro OpenPhone.',
   numero_invalide: 'Numéro invalide. Attendu : 10 chiffres nord-américains.',
   auth_non_synchronisee:
@@ -62,6 +71,12 @@ const MESSAGES_SUCCES: Record<string, string> = {
   reactive: 'Utilisateur réactivé.',
   closer_change: 'Closer rattaché.',
   closer_retire: 'Rattachement au closer retiré.',
+  manager_ajoute:
+    'Casquette de manager donnée. Assigne-lui maintenant ses knockers. Son routage change à sa prochaine connexion.',
+  manager_retire:
+    'Casquette de manager retirée. Ses knockers ont été détachés — réassigne-les à un autre manager.',
+  manager_change: 'Manager assigné.',
+  manager_retire_knocker: 'Ce knocker n’est plus supervisé.',
   numero_enregistre: 'Numéro OpenPhone enregistré.',
   numero_retire: 'Numéro OpenPhone retiré. Ce closer n’enverra plus de SMS.',
 }
@@ -78,13 +93,116 @@ const CLASSE_BOUTON_SECONDAIRE =
 /* commun est isolé ici pour qu'il n'existe qu'en un seul endroit.             */
 /* -------------------------------------------------------------------------- */
 
-function BadgeRole({ role }: { role: RoleUser }) {
+function BadgeRole({ profil }: { profil: ProfilListe }) {
   // `brand` est réservé aux actions (CLAUDE.md §6) : un rôle est une info
   // passive, il reste en gris.
+  //
+  // Manager n'est PAS un rôle : c'est une casquette qui s'ajoute. Deux badges
+  // distincts plutôt qu'un libellé fusionné — la distinction est le cœur du
+  // modèle.
   return (
-    <span className="inline-block shrink-0 rounded-full bg-grey-light px-2 py-0.5 text-xs font-medium text-grey-text">
-      {LIBELLES_ROLES[role]}
+    <span className="flex shrink-0 items-center gap-1">
+      <span className="rounded-full bg-grey-light px-2 py-0.5 text-xs font-medium text-grey-text">
+        {LIBELLES_ROLES[profil.role]}
+      </span>
+      {profil.est_manager && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-navy px-2 py-0.5 text-xs font-medium text-white">
+          <UsersRound className="size-3.5" aria-hidden />
+          Manager
+        </span>
+      )}
     </span>
+  )
+}
+
+/**
+ * Casquette de manager, donnée ou retirée en deux temps (CLAUDE.md §6 : pas de
+ * modale). Cumulable avec n'importe quel rôle — c'est tout l'intérêt.
+ */
+function CasquetteManager({ profil }: { profil: ProfilListe }) {
+  return (
+    <details>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm text-grey-text transition-colors hover:text-navy">
+        {profil.est_manager ? 'Retirer la casquette manager' : 'Faire de lui un manager'}
+      </summary>
+
+      <form action={basculerManager} className="mt-1">
+        <input type="hidden" name="profil_id" value={profil.id} />
+        <input
+          type="hidden"
+          name="est_manager"
+          value={profil.est_manager ? 'false' : 'true'}
+        />
+        <p className="text-sm text-grey-text">
+          {profil.est_manager
+            ? 'Ses knockers seront détachés et il perdra la vue « Mon équipe ».'
+            : 'Il pourra suivre les knockers qu’on lui assignera, en lecture seule.'}
+        </p>
+        <button type="submit" className={`mt-2 w-full ${CLASSE_BOUTON_SECONDAIRE}`}>
+          {profil.est_manager ? 'Confirmer le retrait' : 'Confirmer'}
+        </button>
+      </form>
+    </details>
+  )
+}
+
+/**
+ * Manager qui supervise ce knocker.
+ *
+ * Séparé du rattachement au closer, et c'est le point du module : `closer_id`
+ * dit pour qui il booke, `manager_id` dit qui le suit. Ils pointent vers la même
+ * personne aujourd'hui ; ils divergeront.
+ */
+function RattachementManager({
+  profil,
+  options,
+}: {
+  profil: ProfilListe
+  options: OptionCloser[]
+}) {
+  const actuel = profil.manager_id
+    ? options.find((o) => o.id === profil.manager_id)
+    : undefined
+
+  return (
+    <details>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm text-grey-text transition-colors hover:text-navy">
+        <span>
+          Manager :{' '}
+          <span className="font-medium text-navy">
+            {actuel?.libelle ?? 'non assigné'}
+          </span>
+        </span>
+      </summary>
+
+      <form action={modifierManager} className="mt-1 flex flex-col gap-2">
+        <input type="hidden" name="profil_id" value={profil.id} />
+        <label className="sr-only" htmlFor={`manager-${profil.id}`}>
+          Manager qui supervise ce knocker
+        </label>
+        <select
+          id={`manager-${profil.id}`}
+          name="manager_id"
+          defaultValue={profil.manager_id ?? ''}
+          className={CLASSE_CHAMP}
+        >
+          <option value="">— Aucun —</option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.libelle}
+            </option>
+          ))}
+        </select>
+        {options.length === 0 && (
+          <p className="text-xs text-grey-text">
+            Aucun manager pour l’instant. Coche « Manager » sur un closer d’abord.
+          </p>
+        )}
+        <button type="submit" className={CLASSE_BOUTON_SECONDAIRE}>
+          Enregistrer le manager
+        </button>
+      </form>
+    </details>
   )
 }
 
@@ -245,7 +363,9 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
   const supabase = await createClient()
   const { data: profils } = await supabase
     .from('profiles')
-    .select('id, nom_complet, role, actif, closer_id, openphone_number')
+    .select(
+      'id, nom_complet, role, actif, closer_id, manager_id, est_manager, openphone_number',
+    )
     .order('actif', { ascending: false })
     .order('nom_complet', { ascending: true })
 
@@ -273,21 +393,48 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
     .filter((p) => p.role === 'closer' && p.actif)
     .map((p) => ({ id: p.id, libelle: p.nom_complet || 'Sans nom' }))
 
+  // Managers proposables : la casquette, pas le rôle. Un manager peut être
+  // closer, knocker ou roofer — seul `est_manager` compte.
+  const managersActifs: OptionCloser[] = liste
+    .filter((p) => p.est_manager && p.actif)
+    .map((p) => ({
+      id: p.id,
+      libelle: `${p.nom_complet || 'Sans nom'} (${LIBELLES_ROLES[p.role].toLowerCase()})`,
+    }))
+
   const profilParId = new Map(liste.map((p) => [p.id, p]))
 
-  function optionsPour(profil: ProfilListe): OptionCloser[] {
-    if (!profil.closer_id) return closersActifs
-    if (closersActifs.some((o) => o.id === profil.closer_id)) return closersActifs
+  /**
+   * Options d'un `<select>` de rattachement.
+   *
+   * Le rattaché actuel est réinjecté s'il ne figure plus parmi les actifs :
+   * sinon le `<select>` retomberait sur « Aucun » et l'enregistrement délierait
+   * la personne sans que personne ne l'ait demandé.
+   */
+  function optionsAvecActuel(
+    actuelId: string | null,
+    actifs: OptionCloser[],
+  ): OptionCloser[] {
+    if (!actuelId) return actifs
+    if (actifs.some((o) => o.id === actuelId)) return actifs
 
-    const orphelin = profilParId.get(profil.closer_id)
+    const orphelin = profilParId.get(actuelId)
 
     return [
       {
-        id: profil.closer_id,
-        libelle: `${orphelin?.nom_complet || 'Sans nom'} (désactivé)`,
+        id: actuelId,
+        libelle: `${orphelin?.nom_complet || 'Sans nom'} (retiré)`,
       },
-      ...closersActifs,
+      ...actifs,
     ]
+  }
+
+  function optionsPour(profil: ProfilListe): OptionCloser[] {
+    return optionsAvecActuel(profil.closer_id, closersActifs)
+  }
+
+  function optionsManagerPour(profil: ProfilListe): OptionCloser[] {
+    return optionsAvecActuel(profil.manager_id, managersActifs)
   }
 
   return (
@@ -390,10 +537,10 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
             </select>
           </div>
 
-          {/* Champ affiché en permanence : les interactions sont zéro-JS par
+          {/* Champs affichés en permanence : les interactions sont zéro-JS par
               défaut (CLAUDE.md §6), donc pas d'affichage conditionnel au rôle.
               La server action ignore la valeur si le rôle n'est pas knocker. */}
-          <div className="flex flex-col gap-1.5 lg:col-span-2">
+          <div className="flex flex-col gap-1.5">
             <label htmlFor="closer_id" className="text-sm font-medium text-navy">
               Closer rattaché
             </label>
@@ -415,6 +562,32 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
               rendez-vous seront envoyés. Ignoré pour les autres rôles.
             </p>
           </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="manager_id" className="text-sm font-medium text-navy">
+              Manager
+            </label>
+            <select
+              id="manager_id"
+              name="manager_id"
+              defaultValue=""
+              className={CLASSE_CHAMP}
+            >
+              <option value="">— Aucun —</option>
+              {managersActifs.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.libelle}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-grey-text">
+              Qui supervise ce knocker. Souvent la même personne que son closer,
+              mais pas forcément — les deux se règlent séparément.
+            </p>
+          </div>
+
+          {/* La casquette se donne après création, depuis la liste : elle
+              concerne plutôt les profils existants. */}
 
           <button
             type="submit"
@@ -451,7 +624,7 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                         </span>
                       )}
                     </p>
-                    <BadgeRole role={profil.role} />
+                    <BadgeRole profil={profil} />
                   </div>
 
                   <p className="mt-0.5 flex items-center gap-2 text-sm text-grey-text">
@@ -470,12 +643,24 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                         profil={profil}
                         options={optionsPour(profil)}
                       />
+                      <RattachementManager
+                        profil={profil}
+                        options={optionsManagerPour(profil)}
+                      />
                     </div>
                   )}
 
                   {profil.role === 'closer' && (
                     <div className="mt-2 border-t border-grey-border pt-1">
                       <NumeroOpenPhone profil={profil} />
+                    </div>
+                  )}
+
+                  {/* La casquette de manager n'est réservée à aucun rôle — sauf
+                      à l'admin, qui voit déjà tout le monde. */}
+                  {profil.role !== 'admin' && (
+                    <div className="mt-1">
+                      <CasquetteManager profil={profil} />
                     </div>
                   )}
 
@@ -496,22 +681,25 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
             <table className="w-full table-fixed">
               <thead>
                 <tr className="border-b border-grey-border text-left text-xs font-semibold tracking-wide text-grey-text uppercase">
-                  <th scope="col" className="w-[19%] px-4 py-3">
+                  <th scope="col" className="w-[16%] px-4 py-3">
                     Nom
                   </th>
-                  <th scope="col" className="w-[23%] px-4 py-3">
+                  <th scope="col" className="w-[19%] px-4 py-3">
                     Courriel
                   </th>
-                  <th scope="col" className="w-[12%] px-4 py-3">
+                  <th scope="col" className="w-[14%] px-4 py-3">
                     Rôle
                   </th>
-                  <th scope="col" className="w-[20%] px-4 py-3">
+                  <th scope="col" className="w-[18%] px-4 py-3">
                     Closer / SMS
                   </th>
-                  <th scope="col" className="w-[10%] px-4 py-3">
+                  <th scope="col" className="w-[16%] px-4 py-3">
+                    Manager
+                  </th>
+                  <th scope="col" className="w-[8%] px-4 py-3">
                     État
                   </th>
-                  <th scope="col" className="w-[16%] px-4 py-3">
+                  <th scope="col" className="w-[9%] px-4 py-3">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
@@ -541,7 +729,7 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <BadgeRole role={profil.role} />
+                        <BadgeRole profil={profil} />
                       </td>
                       <td className="px-4 py-3">
                         {profil.role === 'knocker' ? (
@@ -554,6 +742,25 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                         ) : (
                           // Ni rattachement ni SMS pour un roofer ou un admin.
                           <span className="text-sm text-grey-text">—</span>
+                        )}
+                      </td>
+                      {/* Une seule colonne pour les deux faces de la fonction :
+                          qui supervise ce knocker, ou bien la casquette de la
+                          personne elle-même. */}
+                      <td className="px-4 py-3">
+                        {profil.role === 'knocker' && (
+                          <RattachementManager
+                            profil={profil}
+                            options={optionsManagerPour(profil)}
+                          />
+                        )}
+                        {profil.role !== 'admin' && (
+                          <CasquetteManager profil={profil} />
+                        )}
+                        {profil.role === 'admin' && (
+                          <span className="text-sm text-grey-text">
+                            Voit tout
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3">

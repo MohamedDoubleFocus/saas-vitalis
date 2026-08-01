@@ -1,6 +1,13 @@
 'use client'
 
-import { CalendarClock, DoorClosed, Map, Plus, Trophy } from 'lucide-react'
+import {
+  CalendarClock,
+  DoorClosed,
+  Map,
+  Plus,
+  Trophy,
+  UsersRound,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -41,22 +48,46 @@ const ONGLETS_CLOSER: readonly Onglet[] = [
   { href: '/terrain/classement', libelle: 'Podium', icone: Trophy },
 ]
 
-function ongletsPour(role: RoleUser): readonly Onglet[] {
-  if (role === 'knocker') return ONGLETS_KNOCKER
-  if (role === 'closer') return ONGLETS_CLOSER
+/**
+ * Sortie vers la zone manager.
+ *
+ * Sans cet onglet, un closer manager entré dans son agenda n'aurait aucun chemin
+ * de retour vers « Mon équipe » : la barre basse est la seule navigation de la
+ * zone terrain.
+ */
+const ONGLET_EQUIPE: Onglet = {
+  href: '/equipe',
+  libelle: 'Équipe',
+  icone: UsersRound,
+}
 
+function ongletsPour(role: RoleUser, estManager: boolean): readonly Onglet[] {
   // Un admin qui visite la zone terrain voit la navigation du knocker.
-  return ONGLETS_KNOCKER
+  const base = role === 'closer' ? ONGLETS_CLOSER : ONGLETS_KNOCKER
+
+  // Le knocker a déjà quatre onglets plus le bouton central : un cinquième
+  // libellé ne tiendrait pas à 375px. Le cas ne se pose pas aujourd'hui (les
+  // managers sont des closers) ; si un knocker devient manager, il passera par
+  // /accueil plutôt que par une barre illisible.
+  if (!estManager || base === ONGLETS_KNOCKER) return base
+
+  return [...base, ONGLET_EQUIPE]
 }
 
 function estActif(chemin: string, href: string): boolean {
   return chemin === href || chemin.startsWith(`${href}/`)
 }
 
-export function NavigationTerrain({ role }: { role: RoleUser }) {
+export function NavigationTerrain({
+  role,
+  estManager = false,
+}: {
+  role: RoleUser
+  estManager?: boolean
+}) {
   const chemin = usePathname()
 
-  const onglets = ongletsPour(role)
+  const onglets = ongletsPour(role, estManager)
   // Seul le knocker crée des leads.
   const avecBoutonLead = role === 'knocker' || role === 'admin'
 

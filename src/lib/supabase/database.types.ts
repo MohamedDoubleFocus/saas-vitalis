@@ -355,7 +355,9 @@ export type Database = {
           closer_id: string | null
           created_at: string
           google_calendar_id: string | null
+          est_manager: boolean
           id: string
+          manager_id: string | null
           nom_complet: string | null
           openphone_number: string | null
           role: Database["public"]["Enums"]["role_user"]
@@ -365,7 +367,9 @@ export type Database = {
           closer_id?: string | null
           created_at?: string
           google_calendar_id?: string | null
+          est_manager?: boolean
           id: string
+          manager_id?: string | null
           nom_complet?: string | null
           openphone_number?: string | null
           role: Database["public"]["Enums"]["role_user"]
@@ -375,7 +379,9 @@ export type Database = {
           closer_id?: string | null
           created_at?: string
           google_calendar_id?: string | null
+          est_manager?: boolean
           id?: string
+          manager_id?: string | null
           nom_complet?: string | null
           openphone_number?: string | null
           role?: Database["public"]["Enums"]["role_user"]
@@ -391,6 +397,20 @@ export type Database = {
           {
             foreignKeyName: "profiles_closer_id_fkey"
             columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "annuaire_profils"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
