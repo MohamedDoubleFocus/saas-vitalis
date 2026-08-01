@@ -114,6 +114,22 @@ export type EvenementARDV = {
 }
 
 /**
+ * Google rejette tout ce qui n'est pas un identifiant IANA — un nom Windows
+ * comme « Eastern Standard Time » provoque un 400 « Invalid time zone
+ * definition ». On vérifie donc avant d'envoyer plutôt que d'échouer chez eux.
+ */
+function fuseauValide(fuseau: string): boolean {
+  if (!fuseau) return false
+
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: fuseau })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Crée le rendez-vous dans le calendrier du closer.
  *
  * Les heures sont envoyées en ISO **avec décalage** (`toISOString`, donc en UTC) :
@@ -128,20 +144,45 @@ export async function creerEvenement(
     evenement.debut.getTime() + evenement.dureeMinutes * 60 * 1000,
   )
 
-  const donnees = await appeler<{ id?: string }>(
-    `/calendars/${encodeURIComponent(calendarId)}/events`,
-    {
-      methode: 'POST',
-      corps: {
-        summary: evenement.titre,
-        location: evenement.adresse ?? undefined,
-        description: evenement.description ?? undefined,
-        start: { dateTime: evenement.debut.toISOString(), timeZone: evenement.fuseau },
-        end: { dateTime: fin.toISOString(), timeZone: evenement.fuseau },
-        source: { title: 'Vitalis', url: 'https://vitalis.app' },
+  // `toISOString()` porte déjà le décalage (`…Z`) : l'INSTANT est donc exact
+  // même sans `timeZone`. Ce champ ne sert qu'à l'affichage côté Google, on ne
+  // l'envoie donc que s'il est sûr — jamais au prix d'un rejet de l'événement.
+  const fuseau = fuseauValide(evenement.fuseau) ? { timeZone: evenement.fuseau } : {}
+
+  if (!fuseauValide(evenement.fuseau)) {
+    console.warn(
+      `[Google Calendar] Fuseau « ${evenement.fuseau} » invalide, ignoré. ` +
+        `L'heure reste juste (le décalage est dans dateTime).`,
+    )
+  }
+
+  const debutIso = evenement.debut.toISOString()
+
+  let donnees: { id?: string }
+
+  try {
+    donnees = await appeler<{ id?: string }>(
+      `/calendars/${encodeURIComponent(calendarId)}/events`,
+      {
+        methode: 'POST',
+        corps: {
+          summary: evenement.titre,
+          location: evenement.adresse ?? undefined,
+          description: evenement.description ?? undefined,
+          start: { dateTime: debutIso, ...fuseau },
+          end: { dateTime: fin.toISOString(), ...fuseau },
+          source: { title: 'Vitalis', url: 'https://vitalis.app' },
+        },
       },
-    },
-  )
+    )
+  } catch (erreur) {
+    // Le message de Google seul ne dit pas CE QU'ON a envoyé. Sans ces valeurs,
+    // un « Invalid time zone definition » oblige à deviner.
+    throw new Error(
+      `${erreur instanceof Error ? erreur.message : 'Erreur inconnue'} ` +
+        `[envoyé : début=${debutIso}, fuseau=${JSON.stringify(evenement.fuseau)}]`,
+    )
+  }
 
   if (!donnees.id) {
     throw new Error('Google n’a pas renvoyé d’identifiant d’événement.')

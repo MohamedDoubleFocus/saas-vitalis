@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { sessionCourante } from '@/lib/auth'
 import { creerEvenement } from '@/lib/google/calendar'
+import { FUSEAU_QUEBEC } from '@/lib/fuseau'
 import { CONFIG_DISPONIBILITES } from '@/lib/google/disponibilites'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { formaterTelephone } from '@/lib/telephone'
@@ -14,13 +15,20 @@ import { formaterTelephone } from '@/lib/telephone'
  * l'événement pourra être resynchronisé plus tard, `google_event_id` restant à
  * NULL sert de marqueur.
  *
- * ⚠️ Fuseau : Vercel exécute en UTC par défaut. Sans `TZ=America/Toronto` dans
- * les variables d'environnement, un rendez-vous de 19 h serait envoyé à Google
- * comme un événement de 19 h UTC, soit 15 h au Québec.
+ * Le fuseau envoyé à Google est celui de l'entreprise (`FUSEAU_QUEBEC`), pas
+ * celui du serveur : l'heure affichée au closer est donc juste partout.
  */
 export const dynamic = 'force-dynamic'
 
-const FUSEAU = process.env.TZ || 'America/Toronto'
+/**
+ * Fuseau de l'entreprise — une décision métier, PAS un réglage serveur.
+ *
+ * On lisait `process.env.TZ` : si le serveur exposait un nom Windows
+ * (« Eastern Standard Time »), Google rejetait l'événement avec « Invalid time
+ * zone definition ». L'heure d'un rendez-vous de Toitures Vitalis est celle du
+ * Québec, quel que soit l'endroit où tourne le code.
+ */
+const FUSEAU = FUSEAU_QUEBEC
 
 export async function POST(request: NextRequest) {
   const session = await sessionCourante()
