@@ -2,7 +2,7 @@
 
 import { Check, MapPin, Trash2, Undo2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   chargerPlaces,
@@ -21,6 +21,22 @@ const CLASSE_SECONDAIRE =
 
 /** Centre par défaut : Granby. Recentré dès la première recherche d'adresse. */
 const CENTRE_DEFAUT = { lat: 45.4, lng: -72.73 }
+
+/**
+ * Rayon d'une pastille de sommet, converti en mètres pour qu'elle garde une
+ * taille constante à l'écran.
+ *
+ * `Circle` raisonne en mètres, pas en pixels : sans cette conversion, une
+ * pastille visible au zoom 18 deviendrait un point invisible au zoom 13.
+ */
+function rayonPastille(carte: google.maps.Map): number {
+  const zoom = carte.getZoom() ?? 16
+  const latitude = carte.getCenter()?.lat() ?? 45
+  const metresParPixel =
+    (156543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom
+
+  return Math.max(1, 7 * metresParPixel)
+}
 
 /**
  * Tracé d'un secteur sur une carte Google.
@@ -43,6 +59,10 @@ export function CarteDessin() {
   const refPolygone = useRef<google.maps.Polygon | null>(null)
   const refChemin = useRef<google.maps.MVCArray<google.maps.LatLng> | null>(null)
   const refInstance = useRef<google.maps.Map | null>(null)
+  /** Trait ouvert affiché pendant le tracé — un polygone ne montre rien à 2 points. */
+  const refPolyligne = useRef<google.maps.Polyline | null>(null)
+  /** Une pastille par sommet : le seul retour visuel dès le PREMIER clic. */
+  const refPastilles = useRef<google.maps.Circle[]>([])
   /** Lu par les écouteurs Google, qui capturent l'état à leur création. */
   const refMode = useRef<'dessin' | 'termine'>('dessin')
 
@@ -59,8 +79,37 @@ export function CarteDessin() {
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
 
-  /** Recopie le chemin Google dans l'état React. */
-  function relireSommets(chemin: google.maps.MVCArray<google.maps.LatLng>) {
+  /** Redessine une pastille par sommet. Stable : ne touche que des refs. */
+  const redessinerPastilles = useCallback((
+    carte: google.maps.Map,
+    chemin: google.maps.MVCArray<google.maps.LatLng>,
+  ) => {
+    for (const pastille of refPastilles.current) pastille.setMap(null)
+    refPastilles.current = []
+
+    const rayon = rayonPastille(carte)
+
+    for (let i = 0; i < chemin.getLength(); i++) {
+      refPastilles.current.push(
+        new google.maps.Circle({
+          center: chemin.getAt(i),
+          radius: rayon,
+          map: carte,
+          fillColor: '#0e7ba6',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+          // Sans ça, cliquer sur une pastille avalerait le clic de la carte et
+          // le sommet suivant ne serait jamais posé.
+          clickable: false,
+          zIndex: 3,
+        }),
+      )
+    }
+  }, [])
+
+  /** Recopie le chemin Google dans l'état React et rafraîchit l'affichage. */
+  const relireSommets = useCallback((chemin: google.maps.MVCArray<google.maps.LatLng>) => {
     const points: Point[] = []
 
     for (let i = 0; i < chemin.getLength(); i++) {
@@ -69,7 +118,11 @@ export function CarteDessin() {
     }
 
     setSommets(points)
-  }
+
+    const carte = refInstance.current
+
+    if (carte) redessinerPastilles(carte, chemin)
+  }, [redessinerPastilles])
 
   useEffect(() => {
     let annule = false
@@ -125,15 +178,35 @@ export function CarteDessin() {
         fillColor: '#54c3ea',
         fillOpacity: 0.25,
         editable: false,
+        // Pendant le tracé, un clic à l'INTÉRIEUR de la forme doit poser un
+        // sommet, pas être avalé par le polygone.
+        clickable: false,
+        map: carte,
+      })
+
+      // Le polygone ne rend rien sous 3 sommets. Cette polyligne partage le MÊME
+      // chemin — elle se met donc à jour toute seule — et montre le trait dès le
+      // deuxième clic.
+      const polyligne = new google.maps.Polyline({
+        path: chemin,
+        strokeColor: '#0e7ba6',
+        strokeWeight: 3,
+        clickable: false,
+        zIndex: 2,
         map: carte,
       })
 
       refPolygone.current = polygone
+      refPolyligne.current = polyligne
       refChemin.current = chemin
 
       for (const evenement of ['set_at', 'insert_at', 'remove_at'] as const) {
         chemin.addListener(evenement, () => relireSommets(chemin))
       }
+
+      // Les pastilles sont en mètres : leur taille doit être recalculée à chaque
+      // changement de zoom pour rester constante à l'écran.
+      carte.addListener('zoom_changed', () => redessinerPastilles(carte, chemin))
 
       carte.addListener('click', (evenement: google.maps.MapMouseEvent) => {
         if (refMode.current !== 'dessin' || !evenement.latLng) return
@@ -159,8 +232,9 @@ export function CarteDessin() {
     return () => {
       annule = true
     }
-    // Monté une seule fois : la carte et ses écouteurs vivent hors de React.
-  }, [])
+    // `relireSommets` et `redessinerPastilles` sont stables (useCallback sans
+    // dépendance) : l'effet ne tourne donc qu'une seule fois, au montage.
+  }, [relireSommets, redessinerPastilles])
 
   /** Ferme le tracé et rend les coins déplaçables. */
   function terminer() {
@@ -171,13 +245,30 @@ export function CarteDessin() {
 
     refMode.current = 'termine'
     setMode('termine')
-    polygone.setEditable(true)
+
+    // Le polygone reprend la main : il devient cliquable pour que ses poignées
+    // d'édition répondent, et la polyligne s'efface au profit de la forme pleine.
+    polygone.setOptions({ editable: true, clickable: true })
+    refPolyligne.current?.setMap(null)
+
+    // Les poignées natives de Google remplacent nos pastilles.
+    for (const pastille of refPastilles.current) pastille.setMap(null)
+    refPastilles.current = []
   }
 
   function reprendre() {
+    const carte = refInstance.current
+    const chemin = refChemin.current
+
     refMode.current = 'dessin'
     setMode('dessin')
-    refPolygone.current?.setEditable(false)
+
+    refPolygone.current?.setOptions({ editable: false, clickable: false })
+
+    if (carte) {
+      refPolyligne.current?.setMap(carte)
+      if (chemin) redessinerPastilles(carte, chemin)
+    }
   }
 
   function annulerDernierPoint() {
