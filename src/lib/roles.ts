@@ -26,15 +26,40 @@ export const ACCUEIL_PAR_ROLE: Record<RoleUser, string> = {
 }
 
 /**
- * Manager : une CASQUETTE, pas un rôle.
+ * Les CASQUETTES : ce qu'on fait EN PLUS de son rôle.
  *
- * `est_manager` se cumule avec `role`. Aujourd'hui Billal est closer ET manager ;
- * demain quelqu'un pourra être l'un sans l'autre. Le routage doit donc composer
- * les deux au lieu de choisir.
+ * `role` répond à « c'est quoi ton métier », les casquettes à « qu'est-ce que tu
+ * fais aussi ». Elles se cumulent, dans n'importe quelle combinaison. Billal est
+ * closer, manager, et il cogne.
+ *
+ * ⚠️ Deux casquettes, ça va. Une TROISIÈME serait le signal que `role` ne veut
+ * plus rien dire et qu'il faut passer à un vrai modèle multi-rôles.
  */
+export type Casquettes = {
+  /** Supervise une équipe de knockers (lecture seule). */
+  estManager?: boolean
+  /** Cogne des portes. Toujours vrai pour un knocker. */
+  faitDuTerrain?: boolean
+}
+
 export const ROUTES_MANAGER: readonly string[] = ['/accueil', '/equipe']
 
-/** Hub d'accueil des utilisateurs à deux casquettes. */
+/**
+ * Routes du travail de porte, ouvertes par la casquette terrain.
+ *
+ * `/terrain/meetings` en est volontairement absent : les rendez-vous décrochés
+ * par un closer qui cogne sont déjà dans son propre agenda, puisqu'il en est le
+ * closer. Deux écrans pour la même liste n'apprendraient rien.
+ */
+export const ROUTES_TERRAIN: readonly string[] = [
+  '/terrain/rues',
+  '/terrain/lead',
+  '/terrain/portes',
+  '/terrain/classement',
+  '/accueil',
+]
+
+/** Hub d'accueil des utilisateurs à plusieurs casquettes. */
 export const HUB = '/accueil'
 
 /** Tableau de bord d'équipe. */
@@ -72,38 +97,74 @@ export function estRoleUser(valeur: unknown): valeur is RoleUser {
 }
 
 /**
+ * Les « chez-soi » de cet utilisateur, un par casquette, par ordre d'usage.
+ *
+ * Une seule entrée = il n'y a rien à choisir, on l'y envoie directement.
+ * Plusieurs = le hub pose la question.
+ *
+ * Sert à la fois au routage, au hub et à la barre de navigation : une seule
+ * source de vérité, sinon les trois finiraient par diverger.
+ */
+export function destinationsDe(
+  role: RoleUser,
+  casquettes: Casquettes = {},
+): string[] {
+  const destinations: string[] = []
+
+  // Le terrain d'abord : c'est le travail du matin.
+  if (role === 'knocker' || casquettes.faitDuTerrain) {
+    destinations.push('/terrain/rues')
+  }
+
+  const metier = ACCUEIL_PAR_ROLE[role]
+
+  if (!destinations.includes(metier)) destinations.push(metier)
+
+  if (casquettes.estManager) destinations.push(ACCUEIL_MANAGER)
+
+  return destinations
+}
+
+/**
  * Où envoyer cet utilisateur après connexion, ou depuis `/`.
  *
- * Trois cas, dans cet ordre :
+ * Trois règles, dans cet ordre :
  *   1. Admin — il supervise déjà tout, sa console reste son point d'entrée ;
- *   2. Closer ET manager — deux métiers distincts dans la même journée, aucun
- *      des deux n'est « le vrai » : le hub laisse choisir ;
- *   3. Manager sans être closer — une seule casquette, on y va directement.
+ *   2. Manager sans être closer — décision produit explicite : il va droit à son
+ *      équipe, même s'il a d'autres écrans ;
+ *   3. Sinon : une seule destination → on y va ; plusieurs → le hub.
  *
- * Un utilisateur sans casquette de manager retrouve exactement son accueil
- * d'avant : rien ne change pour lui.
+ * Un utilisateur sans casquette retrouve exactement son accueil d'avant.
  */
-export function accueilDuRole(role: RoleUser, estManager = false): string {
+export function accueilDuRole(
+  role: RoleUser,
+  casquettes: Casquettes = {},
+): string {
   if (role === 'admin') return ACCUEIL_PAR_ROLE.admin
-  if (!estManager) return ACCUEIL_PAR_ROLE[role]
 
-  return role === 'closer' ? HUB : ACCUEIL_MANAGER
+  if (casquettes.estManager && role !== 'closer') return ACCUEIL_MANAGER
+
+  const destinations = destinationsDe(role, casquettes)
+
+  return destinations.length > 1 ? HUB : destinations[0]
 }
 
 /**
  * Vrai si cet utilisateur a le droit d'atteindre ce chemin.
  *
- * La casquette de manager AJOUTE des routes, elle n'en retire aucune : un closer
- * manager garde l'accès complet à son agenda.
+ * Les casquettes AJOUTENT des routes, elles n'en retirent aucune : un closer qui
+ * cogne et supervise garde l'accès complet à son agenda.
  */
 export function cheminAutorise(
   role: RoleUser,
   chemin: string,
-  estManager = false,
+  casquettes: Casquettes = {},
 ): boolean {
-  const prefixes = estManager
-    ? [...ROUTES_PAR_ROLE[role], ...ROUTES_MANAGER]
-    : ROUTES_PAR_ROLE[role]
+  const prefixes = [
+    ...ROUTES_PAR_ROLE[role],
+    ...(casquettes.estManager ? ROUTES_MANAGER : []),
+    ...(casquettes.faitDuTerrain ? ROUTES_TERRAIN : []),
+  ]
 
   return prefixes.some((prefixe) => souscheminDe(prefixe, chemin))
 }
@@ -118,16 +179,16 @@ export function cheminAutorise(
 export function destinationApresConnexion(
   role: RoleUser,
   suivant: string | null | undefined,
-  estManager = false,
+  casquettes: Casquettes = {},
 ): string {
   if (
     suivant &&
     suivant.startsWith('/') &&
     !suivant.startsWith('//') &&
-    cheminAutorise(role, suivant.split('?')[0], estManager)
+    cheminAutorise(role, suivant.split('?')[0], casquettes)
   ) {
     return suivant
   }
 
-  return accueilDuRole(role, estManager)
+  return accueilDuRole(role, casquettes)
 }

@@ -4,6 +4,7 @@ import {
   accueilDuRole,
   cheminAutorise,
   destinationApresConnexion,
+  destinationsDe,
   estRoleUser,
 } from './roles'
 
@@ -16,61 +17,142 @@ describe('accueilDuRole', () => {
   })
 
   it('envoie un closer manager sur le hub — deux casquettes, aucune n’est « la vraie »', () => {
-    expect(accueilDuRole('closer', true)).toBe('/accueil')
+    expect(accueilDuRole('closer', { estManager: true })).toBe('/accueil')
   })
 
   it('envoie un manager non closer directement sur son équipe', () => {
-    expect(accueilDuRole('knocker', true)).toBe('/equipe')
-    expect(accueilDuRole('roofer', true)).toBe('/equipe')
+    expect(accueilDuRole('knocker', { estManager: true })).toBe('/equipe')
+    expect(accueilDuRole('roofer', { estManager: true })).toBe('/equipe')
   })
 
   it('laisse l’admin dans sa console même s’il est manager', () => {
-    expect(accueilDuRole('admin', true)).toBe('/admin')
+    expect(accueilDuRole('admin', { estManager: true })).toBe('/admin')
   })
 })
 
 describe('cheminAutorise — casquette manager', () => {
   it('ouvre le hub et la zone équipe au manager', () => {
-    expect(cheminAutorise('closer', '/equipe', true)).toBe(true)
-    expect(cheminAutorise('closer', '/equipe/abc-123', true)).toBe(true)
-    expect(cheminAutorise('closer', '/accueil', true)).toBe(true)
+    expect(cheminAutorise('closer', '/equipe', { estManager: true })).toBe(true)
+    expect(cheminAutorise('closer', '/equipe/abc-123', { estManager: true })).toBe(true)
+    expect(cheminAutorise('closer', '/accueil', { estManager: true })).toBe(true)
   })
 
   it('les ferme à qui n’est pas manager', () => {
-    expect(cheminAutorise('closer', '/equipe', false)).toBe(false)
-    expect(cheminAutorise('closer', '/accueil', false)).toBe(false)
-    expect(cheminAutorise('knocker', '/equipe', false)).toBe(false)
+    expect(cheminAutorise('closer', '/equipe')).toBe(false)
+    expect(cheminAutorise('closer', '/accueil')).toBe(false)
+    expect(cheminAutorise('knocker', '/equipe')).toBe(false)
   })
 
   it('AJOUTE des routes sans en retirer : le closer manager garde son agenda', () => {
-    expect(cheminAutorise('closer', '/terrain/agenda', true)).toBe(true)
-    expect(cheminAutorise('closer', '/terrain/classement', true)).toBe(true)
+    expect(cheminAutorise('closer', '/terrain/agenda', { estManager: true })).toBe(true)
+    expect(cheminAutorise('closer', '/terrain/classement', { estManager: true })).toBe(true)
   })
 
   it('n’élargit pas le reste : un knocker manager ne devient pas closer', () => {
-    expect(cheminAutorise('knocker', '/terrain/agenda', true)).toBe(false)
-    expect(cheminAutorise('knocker', '/admin', true)).toBe(false)
+    expect(cheminAutorise('knocker', '/terrain/agenda', { estManager: true })).toBe(false)
+    expect(cheminAutorise('knocker', '/admin', { estManager: true })).toBe(false)
   })
 
   it('l’admin atteint la zone équipe sans casquette', () => {
-    expect(cheminAutorise('admin', '/equipe', false)).toBe(true)
-    expect(cheminAutorise('admin', '/accueil', false)).toBe(true)
+    expect(cheminAutorise('admin', '/equipe')).toBe(true)
+    expect(cheminAutorise('admin', '/accueil')).toBe(true)
   })
 
   it('ne confond pas un préfixe avec un chemin voisin', () => {
-    expect(cheminAutorise('closer', '/equipements', true)).toBe(false)
+    expect(cheminAutorise('closer', '/equipements', { estManager: true })).toBe(false)
   })
 })
 
 describe('destinationApresConnexion — casquette manager', () => {
   it('respecte une destination d’équipe demandée par un manager', () => {
-    expect(destinationApresConnexion('closer', '/equipe', true)).toBe('/equipe')
+    expect(destinationApresConnexion('closer', '/equipe', { estManager: true })).toBe('/equipe')
   })
 
   it('renvoie un non-manager sur son accueil plutôt que sur l’équipe', () => {
-    expect(destinationApresConnexion('closer', '/equipe', false)).toBe(
+    expect(destinationApresConnexion('closer', '/equipe')).toBe(
       '/terrain/agenda',
     )
+  })
+})
+
+describe('casquette terrain', () => {
+  it('ouvre les écrans de porte à un closer qui cogne', () => {
+    for (const chemin of ['/terrain/rues', '/terrain/lead', '/terrain/portes']) {
+      expect(cheminAutorise('closer', chemin, { faitDuTerrain: true })).toBe(true)
+    }
+  })
+
+  it('les garde fermés au closer qui ne cogne pas', () => {
+    expect(cheminAutorise('closer', '/terrain/lead')).toBe(false)
+    expect(cheminAutorise('closer', '/terrain/portes')).toBe(false)
+  })
+
+  it('n’ouvre PAS « Mes meetings » : ses rendez-vous sont déjà dans son agenda', () => {
+    expect(cheminAutorise('closer', '/terrain/meetings', { faitDuTerrain: true })).toBe(
+      false,
+    )
+  })
+
+  it('ne donne aucun droit de closer à un knocker', () => {
+    expect(cheminAutorise('knocker', '/terrain/agenda', { faitDuTerrain: true })).toBe(
+      false,
+    )
+  })
+
+  it('envoie sur le hub dès qu’il y a plus d’une destination', () => {
+    expect(accueilDuRole('closer', { faitDuTerrain: true })).toBe('/accueil')
+    expect(accueilDuRole('roofer', { faitDuTerrain: true })).toBe('/accueil')
+  })
+
+  it('ne change rien pour un knocker : il cogne déjà', () => {
+    expect(accueilDuRole('knocker', { faitDuTerrain: true })).toBe('/terrain/rues')
+  })
+
+  it('cumule les deux casquettes', () => {
+    expect(
+      cheminAutorise('closer', '/terrain/lead', {
+        faitDuTerrain: true,
+        estManager: true,
+      }),
+    ).toBe(true)
+    expect(
+      cheminAutorise('closer', '/equipe', {
+        faitDuTerrain: true,
+        estManager: true,
+      }),
+    ).toBe(true)
+    expect(
+      cheminAutorise('closer', '/terrain/agenda', {
+        faitDuTerrain: true,
+        estManager: true,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe('destinationsDe', () => {
+  it('une seule destination pour un rôle sans casquette', () => {
+    expect(destinationsDe('closer')).toEqual(['/terrain/agenda'])
+    expect(destinationsDe('roofer')).toEqual(['/chantiers'])
+  })
+
+  it('met le terrain en premier — c’est le travail du matin', () => {
+    expect(destinationsDe('closer', { faitDuTerrain: true })).toEqual([
+      '/terrain/rues',
+      '/terrain/agenda',
+    ])
+  })
+
+  it('ne duplique pas la destination d’un knocker qui cogne', () => {
+    expect(destinationsDe('knocker', { faitDuTerrain: true })).toEqual([
+      '/terrain/rues',
+    ])
+  })
+
+  it('ajoute l’équipe en dernier', () => {
+    expect(
+      destinationsDe('closer', { faitDuTerrain: true, estManager: true }),
+    ).toEqual(['/terrain/rues', '/terrain/agenda', '/equipe'])
   })
 })
 

@@ -48,11 +48,15 @@ export default async function PageClassement({ searchParams }: Props) {
   const supabase = await createClient()
 
   // Annuaire : `profiles` reste fermé aux knockers, la vue expose seulement
-  // id / nom / rôle (migration `annuaire_profils`).
+  // id / nom / rôle / casquette terrain (migration `annuaire_profils`).
+  //
+  // Décision produit : QUICONQUE COGNE CONCOURT. Un closer qui fait du terrain
+  // apparaît donc au podium, au même titre qu'un knocker. Filtrer sur le seul
+  // rôle ferait mentir le tableau — ses portes existent.
   const { data: annuaire } = await supabase
     .from('annuaire_profils')
-    .select('id, nom_complet, role')
-    .eq('role', 'knocker')
+    .select('id, nom_complet, role, fait_du_terrain')
+    .or('role.eq.knocker,fait_du_terrain.eq.true')
 
   const nomsParId = new Map<string, string | null>(
     (annuaire ?? [])

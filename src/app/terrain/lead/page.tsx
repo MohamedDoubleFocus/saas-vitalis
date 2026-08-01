@@ -33,11 +33,22 @@ export default async function PageNouveauLead({ searchParams }: Props) {
 
   const porte = porteId ? await chargerPorte(porteId, session.userId) : null
 
+  /**
+   * À qui envoyer le rendez-vous.
+   *
+   * `profiles.closer_id` ne concerne que les knockers. Un closer qui cogne n'en
+   * a pas — et sans ce repli, le rendez-vous qu'il décroche partirait sans
+   * closer : ni événement Google, ni SMS, ni fiche dans un agenda. Il ferme
+   * évidemment ses propres portes.
+   */
+  const closerId =
+    session.closerId ?? (session.role === 'closer' ? session.userId : null)
+
   return (
     <CadrePage titre={porte ? 'Re-cogner' : 'Nouveau lead'} largeur="terrain">
       <FormulaireLead
         knockerId={session.userId}
-        closerId={session.closerId}
+        closerId={closerId}
         porte={porte}
       />
     </CadrePage>

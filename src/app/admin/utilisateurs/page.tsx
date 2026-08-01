@@ -1,4 +1,4 @@
-import { UsersRound } from 'lucide-react'
+import { DoorClosed, UsersRound } from 'lucide-react'
 import type { Metadata } from 'next'
 
 import { CadrePage } from '@/components/cadre-page'
@@ -12,6 +12,7 @@ import { formaterTelephone } from '@/lib/telephone'
 import {
   basculerActif,
   basculerManager,
+  basculerTerrain,
   creerUtilisateur,
   modifierCloser,
   modifierManager,
@@ -34,6 +35,7 @@ type ProfilListe = {
   closer_id: string | null
   manager_id: string | null
   est_manager: boolean
+  fait_du_terrain: boolean
   openphone_number: string | null
 }
 
@@ -77,6 +79,10 @@ const MESSAGES_SUCCES: Record<string, string> = {
     'Casquette de manager retirée. Ses knockers ont été détachés — réassigne-les à un autre manager.',
   manager_change: 'Manager assigné.',
   manager_retire_knocker: 'Ce knocker n’est plus supervisé.',
+  terrain_ajoute:
+    'Il peut maintenant cogner des portes. Assigne-lui des rues depuis « Secteurs ». Ses écrans terrain apparaissent à sa prochaine connexion.',
+  terrain_retire:
+    'Il ne peut plus créer de leads. Ses portes déjà cognées restent à son nom.',
   numero_enregistre: 'Numéro OpenPhone enregistré.',
   numero_retire: 'Numéro OpenPhone retiré. Ce closer n’enverra plus de SMS.',
 }
@@ -111,7 +117,49 @@ function BadgeRole({ profil }: { profil: ProfilListe }) {
           Manager
         </span>
       )}
+      {/* Redondant sur un knocker, qui cogne par définition. */}
+      {profil.fait_du_terrain && profil.role !== 'knocker' && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-navy px-2 py-0.5 text-xs font-medium text-white">
+          <DoorClosed className="size-3.5" aria-hidden />
+          Terrain
+        </span>
+      )}
     </span>
+  )
+}
+
+/**
+ * Casquette terrain : « cette personne cogne aussi ».
+ *
+ * Non proposée aux knockers — ils cognent déjà, `peut_cogner()` est vrai pour
+ * eux quoi qu'il arrive — ni aux admins, qui atteignent tout.
+ */
+function CasquetteTerrain({ profil }: { profil: ProfilListe }) {
+  return (
+    <details>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm text-grey-text transition-colors hover:text-navy">
+        {profil.fait_du_terrain
+          ? 'Retirer le droit de cogner'
+          : 'Il cogne aussi des portes'}
+      </summary>
+
+      <form action={basculerTerrain} className="mt-1">
+        <input type="hidden" name="profil_id" value={profil.id} />
+        <input
+          type="hidden"
+          name="fait_du_terrain"
+          value={profil.fait_du_terrain ? 'false' : 'true'}
+        />
+        <p className="text-sm text-grey-text">
+          {profil.fait_du_terrain
+            ? 'Il ne pourra plus créer de leads. Les portes déjà cognées restent à son nom.'
+            : 'Il aura ses rues, le formulaire de lead et ses portes, en plus de son rôle. Il concourra au podium des knockers.'}
+        </p>
+        <button type="submit" className={`mt-2 w-full ${CLASSE_BOUTON_SECONDAIRE}`}>
+          {profil.fait_du_terrain ? 'Confirmer le retrait' : 'Confirmer'}
+        </button>
+      </form>
+    </details>
   )
 }
 
@@ -364,7 +412,7 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
   const { data: profils } = await supabase
     .from('profiles')
     .select(
-      'id, nom_complet, role, actif, closer_id, manager_id, est_manager, openphone_number',
+      'id, nom_complet, role, actif, closer_id, manager_id, est_manager, fait_du_terrain, openphone_number',
     )
     .order('actif', { ascending: false })
     .order('nom_complet', { ascending: true })
@@ -656,11 +704,14 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                     </div>
                   )}
 
-                  {/* La casquette de manager n'est réservée à aucun rôle — sauf
-                      à l'admin, qui voit déjà tout le monde. */}
+                  {/* Les casquettes ne sont réservées à aucun rôle — sauf à
+                      l'admin, qui atteint déjà tout. */}
                   {profil.role !== 'admin' && (
                     <div className="mt-1">
                       <CasquetteManager profil={profil} />
+                      {profil.role !== 'knocker' && (
+                        <CasquetteTerrain profil={profil} />
+                      )}
                     </div>
                   )}
 
@@ -744,9 +795,9 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                           <span className="text-sm text-grey-text">—</span>
                         )}
                       </td>
-                      {/* Une seule colonne pour les deux faces de la fonction :
-                          qui supervise ce knocker, ou bien la casquette de la
-                          personne elle-même. */}
+                      {/* Une seule colonne pour toutes les casquettes : qui
+                          supervise ce knocker, et ce que la personne fait en
+                          plus de son rôle. */}
                       <td className="px-4 py-3">
                         {profil.role === 'knocker' && (
                           <RattachementManager
@@ -756,6 +807,9 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                         )}
                         {profil.role !== 'admin' && (
                           <CasquetteManager profil={profil} />
+                        )}
+                        {profil.role !== 'admin' && profil.role !== 'knocker' && (
+                          <CasquetteTerrain profil={profil} />
                         )}
                         {profil.role === 'admin' && (
                           <span className="text-sm text-grey-text">

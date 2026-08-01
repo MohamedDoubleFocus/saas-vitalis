@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { sessionCourante } from '@/lib/auth'
+import { casquettesDe, sessionCourante } from '@/lib/auth'
 import { accueilDuRole } from '@/lib/roles'
 
 /**
@@ -11,5 +11,5 @@ import { accueilDuRole } from '@/lib/roles'
  */
 export default async function Racine() {
   const session = await sessionCourante()
-  redirect(session ? accueilDuRole(session.role, session.estManager) : '/login')
+  redirect(session ? accueilDuRole(session.role, casquettesDe(session)) : '/login')
 }

@@ -3,7 +3,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 import { lireClaimsVitalis } from '@/lib/claims'
-import { accueilDuRole, cheminAutorise, type RoleUser } from '@/lib/roles'
+import {
+  accueilDuRole,
+  cheminAutorise,
+  type Casquettes,
+  type RoleUser,
+} from '@/lib/roles'
 
 import type { Database } from './database.types'
 
@@ -124,37 +129,44 @@ export async function updateSession(request: NextRequest) {
 
   let role: RoleUser
   let actif: boolean
-  let estManager: boolean
+  let casquettes: Casquettes
 
   if (lecture.statut === 'ok') {
     role = lecture.claims.role
     actif = lecture.claims.actif
 
-    if (lecture.claims.estManager === null) {
-      // Jeton émis avant la migration manager : le reste des claims est bon, on
-      // ne va chercher QUE cette colonne. Ce repli disparaît de lui-même au
-      // premier renouvellement du jeton (une heure au plus).
-      const { data: casquette } = await supabase
+    const { estManager, faitDuTerrain } = lecture.claims
+
+    if (estManager === null || faitDuTerrain === null) {
+      // Jeton émis avant les migrations de casquettes : le reste des claims est
+      // bon, on ne va chercher QUE ces colonnes. Ce repli disparaît de lui-même
+      // au premier renouvellement du jeton (une heure au plus).
+      const { data: profilCasquettes } = await supabase
         .from('profiles')
-        .select('est_manager')
+        .select('est_manager, fait_du_terrain')
         .eq('id', userId)
         .maybeSingle()
 
-      estManager = casquette?.est_manager ?? false
+      casquettes = {
+        estManager: estManager ?? profilCasquettes?.est_manager ?? false,
+        faitDuTerrain:
+          faitDuTerrain ??
+          ((profilCasquettes?.fait_du_terrain ?? false) || role === 'knocker'),
+      }
     } else {
-      estManager = lecture.claims.estManager
+      casquettes = { estManager, faitDuTerrain }
     }
   } else if (lecture.statut === 'sans_profil') {
     role = 'knocker' // valeur inutilisée : `actif = false` court-circuite plus bas
     actif = false
-    estManager = false
+    casquettes = {}
   } else {
     // Repli module 1 : le hook n'est pas actif, ou le jeton précède son
     // activation. Une lecture de `profiles` par requête, le temps de la
     // transition.
     const { data: profil, error: erreurProfil } = await supabase
       .from('profiles')
-      .select('role, actif, est_manager')
+      .select('role, actif, est_manager, fait_du_terrain')
       .eq('id', userId)
       .maybeSingle()
 
@@ -173,7 +185,10 @@ export async function updateSession(request: NextRequest) {
 
     role = profil.role
     actif = profil.actif
-    estManager = profil.est_manager
+    casquettes = {
+      estManager: profil.est_manager,
+      faitDuTerrain: profil.fait_du_terrain || profil.role === 'knocker',
+    }
   }
 
   // Compte sans profil, ou désactivé (CLAUDE.md §4.2 : un utilisateur est
@@ -197,20 +212,20 @@ export async function updateSession(request: NextRequest) {
 
   // Déjà connecté : la page de connexion n'a plus rien à offrir.
   if (estPageConnexion(chemin)) {
-    return redirigerVers(accueilDuRole(role, estManager), request, reponse)
+    return redirigerVers(accueilDuRole(role, casquettes), request, reponse)
   }
 
   if (estRoutePublique(chemin)) return reponse
 
   // La racine n'a pas de contenu propre : chaque rôle a sa zone.
   if (chemin === '/') {
-    return redirigerVers(accueilDuRole(role, estManager), request, reponse)
+    return redirigerVers(accueilDuRole(role, casquettes), request, reponse)
   }
 
   // Garde de zone : hors de son périmètre, on renvoie l'utilisateur chez lui
   // plutôt que d'afficher un 403 — il n'a rien à corriger.
-  if (!cheminAutorise(role, chemin, estManager)) {
-    return redirigerVers(accueilDuRole(role, estManager), request, reponse)
+  if (!cheminAutorise(role, chemin, casquettes)) {
+    return redirigerVers(accueilDuRole(role, casquettes), request, reponse)
   }
 
   // Retourner CETTE réponse (et pas une nouvelle) : elle porte les cookies de

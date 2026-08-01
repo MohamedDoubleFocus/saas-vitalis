@@ -1,5 +1,5 @@
 import { NavigationTerrain } from '@/components/navigation-terrain'
-import { exigerSession } from '@/lib/auth'
+import { casquettesDe, exigerSession } from '@/lib/auth'
 import { FournisseurFileAttente } from '@/lib/file-attente/fournisseur'
 
 /**
@@ -26,7 +26,7 @@ export default async function LayoutTerrain({
           carte de chaque liste passe sous la navigation. */}
       <div className="flex flex-1 flex-col pb-24">{children}</div>
 
-      <NavigationTerrain role={session.role} estManager={session.estManager} />
+      <NavigationTerrain role={session.role} casquettes={casquettesDe(session)} />
     </FournisseurFileAttente>
   )
 }

@@ -356,6 +356,7 @@ export type Database = {
           created_at: string
           google_calendar_id: string | null
           est_manager: boolean
+          fait_du_terrain: boolean
           id: string
           manager_id: string | null
           nom_complet: string | null
@@ -368,6 +369,7 @@ export type Database = {
           created_at?: string
           google_calendar_id?: string | null
           est_manager?: boolean
+          fait_du_terrain?: boolean
           id: string
           manager_id?: string | null
           nom_complet?: string | null
@@ -380,6 +382,7 @@ export type Database = {
           created_at?: string
           google_calendar_id?: string | null
           est_manager?: boolean
+          fait_du_terrain?: boolean
           id?: string
           manager_id?: string | null
           nom_complet?: string | null
@@ -561,16 +564,19 @@ export type Database = {
     Views: {
       annuaire_profils: {
         Row: {
+          fait_du_terrain: boolean | null
           id: string | null
           nom_complet: string | null
           role: Database["public"]["Enums"]["role_user"] | null
         }
         Insert: {
+          fait_du_terrain?: boolean | null
           id?: string | null
           nom_complet?: string | null
           role?: Database["public"]["Enums"]["role_user"] | null
         }
         Update: {
+          fait_du_terrain?: boolean | null
           id?: string | null
           nom_complet?: string | null
           role?: Database["public"]["Enums"]["role_user"] | null

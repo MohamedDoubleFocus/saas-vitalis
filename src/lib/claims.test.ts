@@ -15,7 +15,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'knocker', closerId: 'c-9', actif: true, estManager: null },
+      claims: { role: 'knocker', closerId: 'c-9', actif: true, estManager: null, faitDuTerrain: true },
     })
   })
 
@@ -29,7 +29,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'admin', closerId: null, actif: true, estManager: null },
+      claims: { role: 'admin', closerId: null, actif: true, estManager: null, faitDuTerrain: null },
     })
   })
 
@@ -43,7 +43,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'roofer', closerId: null, actif: false, estManager: null },
+      claims: { role: 'roofer', closerId: null, actif: false, estManager: null, faitDuTerrain: null },
     })
   })
 
@@ -88,7 +88,13 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'closer', closerId: null, actif: true, estManager: true },
+      claims: {
+        role: 'closer',
+        closerId: null,
+        actif: true,
+        estManager: true,
+        faitDuTerrain: null,
+      },
     })
   })
 
@@ -103,7 +109,13 @@ describe('lireClaimsVitalis', () => {
       }),
     ).toEqual({
       statut: 'ok',
-      claims: { role: 'closer', closerId: null, actif: true, estManager: false },
+      claims: {
+        role: 'closer',
+        closerId: null,
+        actif: true,
+        estManager: false,
+        faitDuTerrain: null,
+      },
     })
 
     // Absente ou du mauvais type : `null`, pas `false`. Le reste du jeton reste
@@ -120,8 +132,38 @@ describe('lireClaimsVitalis', () => {
       }),
     ).toEqual({
       statut: 'ok',
-      claims: { role: 'closer', closerId: null, actif: true, estManager: null },
+      claims: { role: 'closer', closerId: null, actif: true, estManager: null, faitDuTerrain: null },
     })
+  })
+
+  it('lit la casquette terrain quand le jeton la porte', () => {
+    expect(
+      lireClaimsVitalis({
+        ...BASE,
+        role_vitalis: 'closer',
+        actif: true,
+        est_manager: true,
+        fait_du_terrain: true,
+      }),
+    ).toEqual({
+      statut: 'ok',
+      claims: {
+        role: 'closer',
+        closerId: null,
+        actif: true,
+        estManager: true,
+        faitDuTerrain: true,
+      },
+    })
+  })
+
+  it('n’envoie PAS un knocker chercher en base ce qu’on sait déjà', () => {
+    // Claim absente, mais un knocker cogne par définition : `true`, pas `null`.
+    // Sans ce filet, le cas de très loin le plus fréquent coûterait une lecture
+    // de `profiles` à chaque requête pendant la rotation des jetons.
+    const r = lireClaimsVitalis({ ...BASE, role_vitalis: 'knocker', actif: true })
+
+    expect(r.statut === 'ok' && r.claims.faitDuTerrain).toBe(true)
   })
 
   it('ignore un closer_id du mauvais type au lieu d’échouer', () => {
@@ -134,7 +176,7 @@ describe('lireClaimsVitalis', () => {
 
     expect(r).toEqual({
       statut: 'ok',
-      claims: { role: 'knocker', closerId: null, actif: true, estManager: null },
+      claims: { role: 'knocker', closerId: null, actif: true, estManager: null, faitDuTerrain: true },
     })
   })
 })

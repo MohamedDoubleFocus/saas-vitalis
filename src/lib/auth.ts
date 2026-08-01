@@ -3,7 +3,7 @@ import 'server-only'
 import { redirect } from 'next/navigation'
 
 import { lireClaimsVitalis } from '@/lib/claims'
-import { accueilDuRole, type RoleUser } from '@/lib/roles'
+import { accueilDuRole, type Casquettes, type RoleUser } from '@/lib/roles'
 import { createClient } from '@/lib/supabase/server'
 
 export type SessionApp = {
@@ -13,6 +13,16 @@ export type SessionApp = {
   closerId: string | null
   /** Casquette de manager, cumulable avec le rôle. */
   estManager: boolean
+  /** Cogne des portes. Toujours vrai pour un knocker. */
+  faitDuTerrain: boolean
+}
+
+/** Les casquettes seules, telles que les attend le routage. */
+export function casquettesDe(session: SessionApp): Casquettes {
+  return {
+    estManager: session.estManager,
+    faitDuTerrain: session.faitDuTerrain,
+  }
 }
 
 export type ProfilCourant = SessionApp & {
@@ -55,22 +65,29 @@ export async function sessionCourante(): Promise<SessionApp | null> {
   if (lecture.statut === 'ok') {
     if (!lecture.claims.actif) return null
 
+    const { estManager, faitDuTerrain } = lecture.claims
+
+    // Claims absentes = jeton antérieur aux migrations de casquettes. On ne va
+    // chercher QUE ces colonnes, et seulement le temps que les jetons tournent
+    // (une heure au plus).
+    const casquettes =
+      estManager !== null && faitDuTerrain !== null
+        ? { estManager, faitDuTerrain }
+        : await lireCasquettes(supabase, userId, lecture.claims.role)
+
     return {
       userId,
       role: lecture.claims.role,
       closerId: lecture.claims.closerId,
-      // Claim absente = jeton antérieur à la migration manager. On ne va
-      // chercher QUE cette colonne, et seulement le temps que les jetons
-      // tournent (une heure au plus).
-      estManager:
-        lecture.claims.estManager ?? (await lireEstManager(supabase, userId)),
+      estManager: estManager ?? casquettes.estManager,
+      faitDuTerrain: faitDuTerrain ?? casquettes.faitDuTerrain,
     }
   }
 
   // Repli : le hook n'est pas (encore) actif.
   const { data: profil } = await supabase
     .from('profiles')
-    .select('role, actif, closer_id, est_manager')
+    .select('role, actif, closer_id, est_manager, fait_du_terrain')
     .eq('id', userId)
     .maybeSingle()
 
@@ -81,27 +98,32 @@ export async function sessionCourante(): Promise<SessionApp | null> {
     role: profil.role,
     closerId: profil.closer_id,
     estManager: profil.est_manager,
+    faitDuTerrain: profil.fait_du_terrain || profil.role === 'knocker',
   }
 }
 
 /**
- * Lit la seule colonne `est_manager`, pour les jetons émis avant la migration.
+ * Lit les seules colonnes de casquettes, pour les jetons émis avant migration.
  *
- * En cas d'échec de lecture on renvoie `false` : mieux vaut afficher un écran de
- * moins que d'ouvrir la vue d'une équipe sur une erreur réseau. La RLS, elle,
+ * En cas d'échec de lecture on renvoie `false` partout : mieux vaut afficher un
+ * écran de moins que d'ouvrir une zone sur une erreur réseau. La RLS, elle,
  * refuserait de toute façon les données.
  */
-async function lireEstManager(
+async function lireCasquettes(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-): Promise<boolean> {
+  role: RoleUser,
+): Promise<{ estManager: boolean; faitDuTerrain: boolean }> {
   const { data } = await supabase
     .from('profiles')
-    .select('est_manager')
+    .select('est_manager, fait_du_terrain')
     .eq('id', userId)
     .maybeSingle()
 
-  return data?.est_manager ?? false
+  return {
+    estManager: data?.est_manager ?? false,
+    faitDuTerrain: (data?.fait_du_terrain ?? false) || role === 'knocker',
+  }
 }
 
 /**
@@ -123,7 +145,7 @@ export async function profilCourant(): Promise<ProfilCourant | null> {
 
   const { data: profil } = await supabase
     .from('profiles')
-    .select('role, actif, closer_id, nom_complet, est_manager')
+    .select('role, actif, closer_id, nom_complet, est_manager, fait_du_terrain')
     .eq('id', userId)
     .maybeSingle()
 
@@ -134,6 +156,7 @@ export async function profilCourant(): Promise<ProfilCourant | null> {
     role: profil.role,
     closerId: profil.closer_id,
     estManager: profil.est_manager,
+    faitDuTerrain: profil.fait_du_terrain || profil.role === 'knocker',
     nomComplet: profil.nom_complet,
   }
 }
@@ -150,7 +173,7 @@ export async function exigerAdmin(): Promise<SessionApp> {
 
   if (!session) redirect('/login?error=session')
   if (session.role !== 'admin') {
-    redirect(accueilDuRole(session.role, session.estManager))
+    redirect(accueilDuRole(session.role, casquettesDe(session)))
   }
 
   return session
@@ -172,7 +195,7 @@ export async function exigerManager(): Promise<SessionApp> {
   if (!session) redirect('/login?error=session')
 
   if (!session.estManager && session.role !== 'admin') {
-    redirect(accueilDuRole(session.role, session.estManager))
+    redirect(accueilDuRole(session.role, casquettesDe(session)))
   }
 
   return session

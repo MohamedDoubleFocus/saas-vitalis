@@ -4,6 +4,7 @@ import {
   HardHat,
   LayoutGrid,
   Map,
+  Trophy,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -12,50 +13,68 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { CadrePage } from '@/components/cadre-page'
-import { profilCourant } from '@/lib/auth'
-import { ACCUEIL_PAR_ROLE, accueilDuRole, type RoleUser } from '@/lib/roles'
+import { casquettesDe, profilCourant } from '@/lib/auth'
+import { accueilDuRole, destinationsDe } from '@/lib/roles'
 
 export const metadata: Metadata = {
   title: 'Accueil — Vitalis',
 }
 
 type Entree = {
-  href: string
   titre: string
   description: string
   icone: LucideIcon
 }
 
-/** L'entrée « métier » de chaque rôle — sa casquette du terrain. */
-const ENTREE_ROLE: Record<RoleUser, Omit<Entree, 'href'>> = {
-  closer: {
-    titre: 'Mon agenda',
-    description: 'Mes rendez-vous, les fiches clients et les closes à signer.',
-    icone: CalendarClock,
-  },
-  knocker: {
+/**
+ * Ce que chaque destination veut dire, en clair.
+ *
+ * Clés = les chemins que renvoie `destinationsDe()` : le hub ne décide de rien,
+ * il habille. Toute nouvelle casquette ajoute une ligne ici et une seule.
+ */
+const ENTREES: Record<string, Entree> = {
+  '/terrain/rues': {
     titre: 'Mes rues',
     description: 'Mon secteur, mes portes et mes leads du jour.',
     icone: Map,
   },
-  roofer: {
+  '/terrain/agenda': {
+    titre: 'Mon agenda',
+    description: 'Mes rendez-vous, les fiches clients et les closes à signer.',
+    icone: CalendarClock,
+  },
+  '/chantiers': {
     titre: 'Mes jobs',
     description: 'Les chantiers qui me sont assignés et leurs photos.',
     icone: HardHat,
   },
-  admin: {
+  '/admin': {
     titre: 'Administration',
     description: 'Utilisateurs, secteurs, assignations et intégrations.',
     icone: LayoutGrid,
   },
+  '/equipe': {
+    titre: 'Mon équipe',
+    description:
+      'Les chiffres de mes knockers, leur détail et la carte des portes du jour.',
+    icone: UsersRound,
+  },
 }
 
-const ENTREE_MANAGER: Omit<Entree, 'href'> = {
-  titre: 'Mon équipe',
-  description:
-    'Les chiffres de mes knockers, leur détail et la carte des portes du jour.',
-  icone: UsersRound,
-}
+/**
+ * Écrans utiles mais secondaires : ils ne sont pas des « chez-soi », donc
+ * `destinationsDe()` ne les renvoie pas. Le hub les propose quand même, parce
+ * qu'ils peuvent avoir été chassés de la barre de navigation par le cumul des
+ * casquettes.
+ */
+const SECONDAIRES: readonly (Entree & { href: string })[] = [
+  {
+    href: '/terrain/classement',
+    titre: 'Podium',
+    description: 'Le classement des knockers, par période.',
+    icone: Trophy,
+  },
+]
 
 /**
  * Hub d'accueil des utilisateurs à deux casquettes.
@@ -73,14 +92,21 @@ export default async function PageAccueil() {
 
   if (!profil) redirect('/login?error=session')
 
-  if (!profil.estManager) {
-    redirect(accueilDuRole(profil.role, false))
+  const casquettes = casquettesDe(profil)
+  const destinations = destinationsDe(profil.role, casquettes)
+
+  // Une seule destination : il n'y a rien à choisir. On l'y envoie plutôt que de
+  // lui présenter un menu à une entrée.
+  if (destinations.length < 2) {
+    redirect(accueilDuRole(profil.role, casquettes))
   }
 
-  const entrees: Entree[] = [
-    { href: ACCUEIL_PAR_ROLE[profil.role], ...ENTREE_ROLE[profil.role] },
-    { href: '/equipe', ...ENTREE_MANAGER },
-  ]
+  const entrees = destinations
+    .map((href) => ({ href, ...ENTREES[href] }))
+    .filter((entree) => Boolean(entree.titre))
+
+  // Le podium n'a de sens que pour qui cogne.
+  const secondaires = casquettes.faitDuTerrain ? SECONDAIRES : []
 
   const prenom = profil.nomComplet?.trim().split(/\s+/)[0]
 
@@ -90,7 +116,8 @@ export default async function PageAccueil() {
         Bonjour{prenom ? ` ${prenom}` : ''}
       </p>
       <p className="mb-5 text-sm text-grey-text">
-        Tu portes deux casquettes aujourd’hui. Par où veux-tu commencer&nbsp;?
+        Tu portes {entrees.length === 2 ? 'deux' : `${entrees.length}`} casquettes
+        aujourd’hui. Par où veux-tu commencer&nbsp;?
       </p>
 
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-4">
@@ -128,6 +155,26 @@ export default async function PageAccueil() {
           )
         })}
       </ul>
+
+      {secondaires.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {secondaires.map((entree) => {
+            const Icone = entree.icone
+
+            return (
+              <li key={entree.href}>
+                <Link
+                  href={entree.href}
+                  className="flex min-h-11 items-center gap-2 rounded-full border border-grey-border bg-white px-4 text-sm font-semibold text-navy transition-colors hover:bg-grey-light"
+                >
+                  <Icone className="size-5 text-grey-text" aria-hidden />
+                  {entree.titre}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       <p className="mt-6 text-xs text-grey-text">
         Tu peux revenir ici à tout moment depuis l’adresse /accueil.

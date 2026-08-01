@@ -316,6 +316,51 @@ export async function basculerManager(formData: FormData) {
 }
 
 /**
+ * Donne ou retire la casquette terrain — « cette personne cogne aussi ».
+ *
+ * Sans effet sur un knocker, qui cogne déjà : `peut_cogner()` est vrai pour lui
+ * quoi qu'il arrive. La case n'est donc proposée que sur les autres rôles.
+ *
+ * Retirer la casquette ne touche à AUCUN lead : les portes déjà cognées restent
+ * à son nom (traçabilité des commissions, CLAUDE.md §4.3). Il perd seulement le
+ * droit d'en créer de nouvelles.
+ */
+export async function basculerTerrain(formData: FormData) {
+  await exigerAdmin()
+
+  const profilId = texteOuNull(formData.get('profil_id'))
+  const faitDuTerrain = formData.get('fait_du_terrain') === 'true'
+
+  if (!profilId) {
+    redirect(`${CHEMIN}?error=champs_manquants`)
+  }
+
+  const supabase = await createClient()
+
+  const { data: cible } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profilId)
+    .maybeSingle()
+
+  if (!cible) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ fait_du_terrain: faitDuTerrain })
+    .eq('id', profilId)
+
+  if (error) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  revalidatePath(CHEMIN)
+  redirect(`${CHEMIN}?ok=${faitDuTerrain ? 'terrain_ajoute' : 'terrain_retire'}`)
+}
+
+/**
  * Change le manager qui supervise un knocker (ou le détache).
  *
  * Volontairement distinct de `modifierCloser` : `closer_id` dit POUR QUI le

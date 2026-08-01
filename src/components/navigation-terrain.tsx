@@ -3,6 +3,7 @@
 import {
   CalendarClock,
   DoorClosed,
+  LayoutGrid,
   Map,
   Plus,
   Trophy,
@@ -12,7 +13,7 @@ import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-import type { RoleUser } from '@/lib/roles'
+import type { Casquettes, RoleUser } from '@/lib/roles'
 
 /**
  * Barre de navigation basse de la zone terrain.
@@ -31,22 +32,32 @@ type Onglet = {
 }
 
 /**
+ * Onglets candidats, PAR ORDRE DE PRIORITÉ.
+ *
+ * L'ordre n'est pas cosmétique : c'est lui qui décide ce qui saute quand la
+ * barre déborde (voir `ongletsPour`). Du plus utilisé au moins utilisé.
+ *
  * Libellés courts, pas des abréviations de confort : avec quatre onglets ET le
  * bouton central, une cible fait ~73 px sur un écran de 375 px. « Classement » y
  * déborderait ou passerait sous le plancher de 14 px (CLAUDE.md §6). Le titre
  * complet reste en haut de chaque écran.
  */
-const ONGLETS_KNOCKER: readonly Onglet[] = [
+const ONGLETS_TERRAIN: readonly Onglet[] = [
   { href: '/terrain/rues', libelle: 'Rues', icone: Map },
   { href: '/terrain/portes', libelle: 'Portes', icone: DoorClosed },
-  { href: '/terrain/meetings', libelle: 'RDV', icone: CalendarClock },
-  { href: '/terrain/classement', libelle: 'Podium', icone: Trophy },
 ]
 
-const ONGLETS_CLOSER: readonly Onglet[] = [
-  { href: '/terrain/agenda', libelle: 'Agenda', icone: CalendarClock },
-  { href: '/terrain/classement', libelle: 'Podium', icone: Trophy },
-]
+const ONGLET_MEETINGS: Onglet = {
+  href: '/terrain/meetings',
+  libelle: 'RDV',
+  icone: CalendarClock,
+}
+
+const ONGLET_AGENDA: Onglet = {
+  href: '/terrain/agenda',
+  libelle: 'Agenda',
+  icone: CalendarClock,
+}
 
 /**
  * Sortie vers la zone manager.
@@ -61,17 +72,54 @@ const ONGLET_EQUIPE: Onglet = {
   icone: UsersRound,
 }
 
-function ongletsPour(role: RoleUser, estManager: boolean): readonly Onglet[] {
+const ONGLET_PODIUM: Onglet = {
+  href: '/terrain/classement',
+  libelle: 'Podium',
+  icone: Trophy,
+}
+
+/** Repli quand la barre déborde : tout le reste vit dans le hub. */
+const ONGLET_ACCUEIL: Onglet = {
+  href: '/accueil',
+  libelle: 'Accueil',
+  icone: LayoutGrid,
+}
+
+/**
+ * Nombre maximum d'onglets à côté du bouton central.
+ *
+ * Quatre onglets + le bouton = cinq cibles, soit ~73 px chacune à 375 px. C'est
+ * la limite basse du confortable ; à six, les libellés passeraient sous 14 px.
+ */
+const MAX_ONGLETS = 4
+
+/**
+ * Onglets d'un utilisateur, casquettes comprises.
+ *
+ * Le cumul des casquettes peut produire plus de destinations que la barre n'en
+ * accepte — un closer qui cogne ET manage en a cinq. Plutôt que de rétrécir le
+ * texte (interdit, §6) ou d'inventer un menu, on garde les plus utilisées et on
+ * remplace la dernière place par « Accueil », qui mène au hub où TOUT figure.
+ * Rien ne devient inaccessible, seulement un tap plus loin.
+ */
+function ongletsPour(role: RoleUser, casquettes: Casquettes): readonly Onglet[] {
+  const cogne = role === 'knocker' || Boolean(casquettes.faitDuTerrain)
   // Un admin qui visite la zone terrain voit la navigation du knocker.
-  const base = role === 'closer' ? ONGLETS_CLOSER : ONGLETS_KNOCKER
+  const closer = role === 'closer'
 
-  // Le knocker a déjà quatre onglets plus le bouton central : un cinquième
-  // libellé ne tiendrait pas à 375px. Le cas ne se pose pas aujourd'hui (les
-  // managers sont des closers) ; si un knocker devient manager, il passera par
-  // /accueil plutôt que par une barre illisible.
-  if (!estManager || base === ONGLETS_KNOCKER) return base
+  const candidats: Onglet[] = []
 
-  return [...base, ONGLET_EQUIPE]
+  if (cogne || role === 'admin') candidats.push(...ONGLETS_TERRAIN)
+  // « Mes meetings » ne concerne que le knocker : les rendez-vous d'un closer
+  // qui cogne sont déjà dans son agenda, puisqu'il en est le closer.
+  if (role === 'knocker' || role === 'admin') candidats.push(ONGLET_MEETINGS)
+  if (closer) candidats.push(ONGLET_AGENDA)
+  if (casquettes.estManager) candidats.push(ONGLET_EQUIPE)
+  candidats.push(ONGLET_PODIUM)
+
+  if (candidats.length <= MAX_ONGLETS) return candidats
+
+  return [...candidats.slice(0, MAX_ONGLETS - 1), ONGLET_ACCUEIL]
 }
 
 function estActif(chemin: string, href: string): boolean {
@@ -80,16 +128,18 @@ function estActif(chemin: string, href: string): boolean {
 
 export function NavigationTerrain({
   role,
-  estManager = false,
+  casquettes = {},
 }: {
   role: RoleUser
-  estManager?: boolean
+  casquettes?: Casquettes
 }) {
   const chemin = usePathname()
 
-  const onglets = ongletsPour(role, estManager)
-  // Seul le knocker crée des leads.
-  const avecBoutonLead = role === 'knocker' || role === 'admin'
+  const onglets = ongletsPour(role, casquettes)
+  // Le bouton « + » suit la casquette terrain, pas le rôle : un closer qui cogne
+  // en a autant besoin qu'un knocker.
+  const avecBoutonLead =
+    role === 'knocker' || role === 'admin' || Boolean(casquettes.faitDuTerrain)
 
   return (
     <nav

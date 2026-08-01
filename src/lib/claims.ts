@@ -17,6 +17,13 @@ export type ClaimsVitalis = {
    * hub, pendant l'heure de vie du jeton.
    */
   estManager: boolean | null
+  /**
+   * Cogne des portes. Le hook renvoie la CAPACITÉ, pas le drapeau brut : un
+   * knocker cogne par définition, l'application n'a donc qu'une valeur à lire.
+   *
+   * `null` = claim absente, même règle que `estManager`.
+   */
+  faitDuTerrain: boolean | null
 }
 
 /**
@@ -80,6 +87,14 @@ export function lireClaimsVitalis(
       // est bon. On signale l'absence, et l'appelant ne va chercher QUE cette
       // valeur en base — repli qui disparaît au premier renouvellement du jeton.
       estManager: typeof claims.est_manager === 'boolean' ? claims.est_manager : null,
+      // Filet : même si le hook n'a pas encore été mis à jour, un knocker cogne.
+      // Ça évite un repli en base pour le cas de très loin le plus fréquent.
+      faitDuTerrain:
+        typeof claims.fait_du_terrain === 'boolean'
+          ? claims.fait_du_terrain
+          : roleBrut === 'knocker'
+            ? true
+            : null,
     },
   }
 }
