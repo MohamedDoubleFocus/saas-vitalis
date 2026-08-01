@@ -99,27 +99,36 @@ const CLASSE_BOUTON_SECONDAIRE =
 /* commun est isolé ici pour qu'il n'existe qu'en un seul endroit.             */
 /* -------------------------------------------------------------------------- */
 
+/** Un badge, une notion. `whitespace-nowrap` : « Manager » ne se coupe pas en deux. */
+const CLASSE_BADGE =
+  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap'
+
 function BadgeRole({ profil }: { profil: ProfilListe }) {
   // `brand` est réservé aux actions (CLAUDE.md §6) : un rôle est une info
   // passive, il reste en gris.
   //
-  // Manager n'est PAS un rôle : c'est une casquette qui s'ajoute. Deux badges
-  // distincts plutôt qu'un libellé fusionné — la distinction est le cœur du
-  // modèle.
+  // Manager et Terrain ne sont PAS des rôles : ce sont des casquettes qui
+  // s'ajoutent. Des badges distincts plutôt qu'un libellé fusionné — la
+  // distinction est le cœur du modèle.
+  //
+  // ⚠️ `flex-wrap` et PAS `shrink-0` : jusqu'à trois badges tiennent ici, dans
+  // une colonne de tableau à largeur fixe. Refuser de rétrécir faisait déborder
+  // la ligne entière, et l'`overflow-hidden` de la carte rognait la dernière
+  // colonne — les actions devenaient inatteignables au-delà de deux casquettes.
   return (
-    <span className="flex shrink-0 items-center gap-1">
-      <span className="rounded-full bg-grey-light px-2 py-0.5 text-xs font-medium text-grey-text">
+    <span className="flex min-w-0 flex-wrap items-center gap-1">
+      <span className={`${CLASSE_BADGE} bg-grey-light text-grey-text`}>
         {LIBELLES_ROLES[profil.role]}
       </span>
       {profil.est_manager && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-navy px-2 py-0.5 text-xs font-medium text-white">
+        <span className={`${CLASSE_BADGE} bg-navy text-white`}>
           <UsersRound className="size-3.5" aria-hidden />
           Manager
         </span>
       )}
       {/* Redondant sur un knocker, qui cogne par définition. */}
       {profil.fait_du_terrain && profil.role !== 'knocker' && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-navy px-2 py-0.5 text-xs font-medium text-white">
+        <span className={`${CLASSE_BADGE} bg-navy text-white`}>
           <DoorClosed className="size-3.5" aria-hidden />
           Terrain
         </span>
@@ -371,7 +380,9 @@ function NumeroOpenPhone({ profil }: { profil: ProfilListe }) {
 function ActionActif({ profil }: { profil: ProfilListe }) {
   return (
     <details>
-      <summary className="flex h-11 cursor-pointer list-none items-center text-sm font-medium text-grey-text transition-colors hover:text-navy">
+      {/* `min-h-11` et non `h-11` : dans la colonne étroite du tableau, le
+          libellé passe sur deux lignes et une hauteur fixe le ferait déborder. */}
+      <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm font-medium text-grey-text transition-colors hover:text-navy">
         {profil.actif ? 'Désactiver l’accès' : 'Réactiver l’accès'}
       </summary>
 
@@ -663,15 +674,18 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
 
               return (
                 <li key={profil.id} className="rounded-2xl bg-white p-4 shadow-card">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate font-display text-base font-semibold text-navy">
-                      {profil.nom_complet || 'Sans nom'}
-                      {estMoi && (
-                        <span className="ml-2 text-xs font-normal text-grey-text">
-                          (toi)
-                        </span>
-                      )}
-                    </p>
+                  {/* Le nom occupe sa propre ligne : à 375px, trois badges posés
+                      à côté de lui le réduiraient à deux ou trois lettres. */}
+                  <p className="truncate font-display text-base font-semibold text-navy">
+                    {profil.nom_complet || 'Sans nom'}
+                    {estMoi && (
+                      <span className="ml-2 text-xs font-normal text-grey-text">
+                        (toi)
+                      </span>
+                    )}
+                  </p>
+
+                  <div className="mt-1">
                     <BadgeRole profil={profil} />
                   </div>
 
@@ -732,25 +746,30 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
             <table className="w-full table-fixed">
               <thead>
                 <tr className="border-b border-grey-border text-left text-xs font-semibold tracking-wide text-grey-text uppercase">
-                  <th scope="col" className="w-[16%] px-4 py-3">
+                  {/* Les largeurs totalisent 100 %. Toute colonne dont le
+                      contenu refuse de rétrécir fait déborder la ligne : voir la
+                      note dans `BadgeRole`. */}
+                  <th scope="col" className="w-[14%] px-4 py-3">
                     Nom
                   </th>
-                  <th scope="col" className="w-[19%] px-4 py-3">
+                  <th scope="col" className="w-[17%] px-4 py-3">
                     Courriel
                   </th>
-                  <th scope="col" className="w-[14%] px-4 py-3">
+                  <th scope="col" className="w-[16%] px-4 py-3">
                     Rôle
                   </th>
-                  <th scope="col" className="w-[18%] px-4 py-3">
+                  <th scope="col" className="w-[16%] px-4 py-3">
                     Closer / SMS
                   </th>
-                  <th scope="col" className="w-[16%] px-4 py-3">
-                    Manager
+                  {/* Cette colonne porte TOUTES les casquettes, pas seulement
+                      celle de manager — d'où le libellé. */}
+                  <th scope="col" className="w-[18%] px-4 py-3">
+                    Casquettes
                   </th>
                   <th scope="col" className="w-[8%] px-4 py-3">
                     État
                   </th>
-                  <th scope="col" className="w-[9%] px-4 py-3">
+                  <th scope="col" className="w-[11%] px-4 py-3">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
