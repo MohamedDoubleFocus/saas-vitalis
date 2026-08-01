@@ -1,8 +1,9 @@
+import { ArrowLeft, Plus } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { CadrePage } from '@/components/cadre-page'
-import { exigerAdmin } from '@/lib/auth'
+import { exigerManager } from '@/lib/auth'
 import { progressionSecteur } from '@/lib/secteurs'
 import { createClient } from '@/lib/supabase/server'
 
@@ -18,20 +19,30 @@ const MESSAGES_SUCCES: Record<string, string> = {
   supprime: 'Secteur supprimé.',
 }
 
+/**
+ * Les secteurs du manager.
+ *
+ * La RLS fait le tri : `secteurs_select_manager` ne lui montre que ceux qu'il a
+ * créés, `secteurs_admin_tout` montre tout à l'admin. Aucun filtre applicatif —
+ * un filtre ici ne protégerait rien de plus et pourrait diverger de la base.
+ */
 export default async function PageSecteurs({ searchParams }: Props) {
   const { error, ok } = await searchParams
-  await exigerAdmin()
+  const session = await exigerManager()
 
   const supabase = await createClient()
 
-  // Une seule requête par table, jointes en mémoire : le volume est de l'ordre
-  // de la dizaine de secteurs et de quelques centaines de rues.
+  // Une requête par table, jointes en mémoire : le volume est de l'ordre de la
+  // dizaine de secteurs et de quelques centaines de rues.
   const [{ data: secteurs }, { data: rues }, { data: knockers }] = await Promise.all([
     supabase
       .from('secteurs')
       .select('id, nom, notes, knocker_id, created_at')
       .order('created_at', { ascending: false }),
-    supabase.from('territoires').select('secteur_id, complete').not('secteur_id', 'is', null),
+    supabase
+      .from('territoires')
+      .select('secteur_id, complete')
+      .not('secteur_id', 'is', null),
     supabase.from('profiles').select('id, nom_complet').eq('role', 'knocker'),
   ])
 
@@ -51,6 +62,16 @@ export default async function PageSecteurs({ searchParams }: Props) {
 
   return (
     <CadrePage titre="Secteurs" largeur="gestion">
+      {session.estManager && session.role !== 'admin' && (
+        <Link
+          href="/equipe"
+          className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-strong"
+        >
+          <ArrowLeft className="size-5" aria-hidden />
+          Mon équipe
+        </Link>
+      )}
+
       {error && (
         <p
           role="alert"
@@ -70,16 +91,17 @@ export default async function PageSecteurs({ searchParams }: Props) {
       )}
 
       <Link
-        href="/admin/secteurs/nouveau"
-        className="mb-4 flex h-12 items-center justify-center rounded-lg bg-brand text-base font-semibold text-white shadow-cta transition-colors hover:bg-brand-hover active:bg-brand-strong"
+        href="/equipe/secteurs/nouveau"
+        className="mb-4 flex h-12 items-center justify-center gap-2 rounded-lg bg-brand text-base font-semibold text-white shadow-cta transition-colors hover:bg-brand-hover active:bg-brand-strong"
       >
-        + Nouveau secteur
+        <Plus className="size-6" aria-hidden />
+        Nouveau secteur
       </Link>
 
       {(secteurs ?? []).length === 0 ? (
         <p className="rounded-2xl bg-white p-4 text-sm text-grey-text shadow-card">
-          Aucun secteur. Trace-en un sur la carte : les rues seront récupérées
-          automatiquement depuis OpenStreetMap.
+          Aucun secteur. Cherche une adresse dans le quartier visé : les rues
+          seront récupérées automatiquement depuis OpenStreetMap.
         </p>
       ) : (
         <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4">
@@ -95,7 +117,7 @@ export default async function PageSecteurs({ searchParams }: Props) {
             return (
               <li key={secteur.id}>
                 <Link
-                  href={`/admin/secteurs/${secteur.id}`}
+                  href={`/equipe/secteurs/${secteur.id}`}
                   className="block h-full rounded-2xl bg-white p-4 shadow-card transition-colors hover:bg-grey-light"
                 >
                   {/* Ligne 1 : le secteur et son knocker. */}

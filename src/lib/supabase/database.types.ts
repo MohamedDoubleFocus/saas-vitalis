@@ -422,33 +422,45 @@ export type Database = {
       }
       secteurs: {
         Row: {
+          centre: Json | null
           created_at: string
           cree_par: string | null
           id: string
           knocker_id: string | null
           nom: string
           notes: string | null
+          osm_type: string | null
+          osm_zone_id: number | null
           polygone: Json
+          rayon_metres: number | null
           updated_at: string
         }
         Insert: {
+          centre?: Json | null
           created_at?: string
           cree_par?: string | null
           id?: string
           knocker_id?: string | null
           nom: string
           notes?: string | null
+          osm_type?: string | null
+          osm_zone_id?: number | null
           polygone: Json
+          rayon_metres?: number | null
           updated_at?: string
         }
         Update: {
+          centre?: Json | null
           created_at?: string
           cree_par?: string | null
           id?: string
           knocker_id?: string | null
           nom?: string
           notes?: string | null
+          osm_type?: string | null
+          osm_zone_id?: number | null
           polygone?: Json
+          rayon_metres?: number | null
           updated_at?: string
         }
         Relationships: [

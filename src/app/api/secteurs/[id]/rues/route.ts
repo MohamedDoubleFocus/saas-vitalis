@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { sessionCourante } from '@/lib/auth'
-import { ruesDuPolygone } from '@/lib/overpass'
+import { ruesDeLaZone, ruesDuPolygone } from '@/lib/overpass'
 import { polygoneValide } from '@/lib/secteurs'
 import { createClient } from '@/lib/supabase/server'
 
@@ -27,15 +27,21 @@ export async function POST(
     return NextResponse.json({ erreur: 'Session requise.' }, { status: 401 })
   }
 
-  if (session.role !== 'admin') {
-    return NextResponse.json({ erreur: 'Réservé aux administrateurs.' }, { status: 403 })
+  if (!session.estManager && session.role !== 'admin') {
+    return NextResponse.json(
+      { erreur: 'Réservé aux managers et aux administrateurs.' },
+      { status: 403 },
+    )
   }
 
   const supabase = await createClient()
 
+  // La RLS décide de la visibilité : un manager ne lit ici que SES secteurs
+  // (`secteurs_select_manager`). Un secteur qu'il ne gère pas donne un 404, pas
+  // un import silencieux sur la zone de quelqu'un d'autre.
   const { data: secteur } = await supabase
     .from('secteurs')
-    .select('id, polygone')
+    .select('id, polygone, osm_zone_id, osm_type')
     .eq('id', id)
     .maybeSingle()
 
@@ -43,17 +49,29 @@ export async function POST(
     return NextResponse.json({ erreur: 'Secteur introuvable.' }, { status: 404 })
   }
 
-  if (!polygoneValide(secteur.polygone)) {
+  // On rejoue la zone OSM d'origine quand on la connaît : c'est elle qui a servi
+  // à l'import initial, et elle est plus fidèle que le contour reconstruit —
+  // lequel peut n'être qu'un cadre englobant.
+  const parZone =
+    typeof secteur.osm_zone_id === 'number' &&
+    (secteur.osm_type === 'relation' || secteur.osm_type === 'way')
+
+  if (!parZone && !polygoneValide(secteur.polygone)) {
     return NextResponse.json({ erreur: 'Polygone invalide.' }, { status: 400 })
   }
 
   try {
-    const { rues } = await ruesDuPolygone(secteur.polygone)
+    const { rues } = parZone
+      ? await ruesDeLaZone(
+          secteur.osm_zone_id as number,
+          secteur.osm_type as 'relation' | 'way',
+        )
+      : await ruesDuPolygone(secteur.polygone as { lat: number; lng: number }[])
 
     if (rues.length === 0) {
       return NextResponse.json({
         ajoutees: 0,
-        avertissement: 'Aucune rue nommée trouvée dans ce polygone.',
+        avertissement: 'Aucune rue nommée trouvée dans cette zone.',
       })
     }
 

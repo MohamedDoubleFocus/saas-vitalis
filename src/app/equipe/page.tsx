@@ -158,17 +158,29 @@ export default async function PageEquipe({ searchParams }: Props) {
 
   return (
     <CadrePage titre="Mon équipe" largeur="gestion">
-      {/* Chemin de retour vers l'autre casquette. Un manager qui est aussi
-          closer doit pouvoir repasser à son agenda sans taper une URL. */}
-      {session.estManager && session.role !== 'admin' && (
+      <div className="mb-4 flex items-center justify-between gap-3">
+        {/* Chemin de retour vers l'autre casquette. Un manager qui est aussi
+            closer doit pouvoir repasser à son agenda sans taper une URL. */}
+        {session.estManager && session.role !== 'admin' ? (
+          <Link
+            href="/accueil"
+            className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-strong"
+          >
+            <ArrowLeft className="size-5" aria-hidden />
+            Accueil
+          </Link>
+        ) : (
+          <span />
+        )}
+
         <Link
-          href="/accueil"
-          className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-strong"
+          href="/equipe/secteurs"
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-grey-border bg-white px-4 text-sm font-semibold text-navy transition-colors hover:bg-grey-light"
         >
-          <ArrowLeft className="size-5" aria-hidden />
-          Accueil
+          <MapPin className="size-5 text-grey-text" aria-hidden />
+          Secteurs
         </Link>
-      )}
+      </div>
 
       {/* Rail de périodes : liens `?periode=`, zéro JS (§6). */}
       <nav aria-label="Période" className="-mx-4 mb-4 overflow-x-auto px-4">

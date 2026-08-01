@@ -163,6 +163,15 @@ create policy opportunites_delete_terrain on public.opportunites
 -- 5. territoires — MÊME TRAITEMENT
 -- ----------------------------------------------------------------------------
 -- Un closer qui cogne a besoin de ses rues assignées et de pouvoir les cocher.
+--
+-- ⚠️ NE PAS SIMPLIFIER EN `knocker_id = auth.uid()`.
+-- Depuis la migration `secteurs`, l'attribution se fait au niveau du SECTEUR
+-- (`secteurs.knocker_id`) : les rues importées d'un secteur ont leur propre
+-- `territoires.knocker_id` à NULL. Retirer la branche « secteur » couperait un
+-- knocker de TOUTES ses rues — la panne serait silencieuse et totale.
+--
+-- La branche `territoires.knocker_id` reste en OU pour les rues saisies à la
+-- main, hors secteur.
 -- ============================================================================
 
 drop policy if exists territoires_select_knocker on public.territoires;
@@ -171,7 +180,15 @@ create policy territoires_select_terrain on public.territoires
   for select to authenticated
   using (
     (select public.peut_cogner())
-    and knocker_id = (select auth.uid())
+    and (
+      knocker_id = (select auth.uid())
+      or exists (
+        select 1
+        from public.secteurs s
+        where s.id = territoires.secteur_id
+          and s.knocker_id = (select auth.uid())
+      )
+    )
   );
 
 drop policy if exists territoires_update_knocker on public.territoires;
@@ -180,9 +197,38 @@ create policy territoires_update_terrain on public.territoires
   for update to authenticated
   using (
     (select public.peut_cogner())
-    and knocker_id = (select auth.uid())
+    and (
+      knocker_id = (select auth.uid())
+      or exists (
+        select 1
+        from public.secteurs s
+        where s.id = territoires.secteur_id
+          and s.knocker_id = (select auth.uid())
+      )
+    )
   )
   with check (
+    (select public.peut_cogner())
+    and (
+      knocker_id = (select auth.uid())
+      or exists (
+        select 1
+        from public.secteurs s
+        where s.id = territoires.secteur_id
+          and s.knocker_id = (select auth.uid())
+      )
+    )
+  );
+
+-- --- secteurs : le knocker voit les siens ------------------------------------
+-- Même correction : `secteurs_select_knocker` (migration secteurs) testait
+-- `role_actuel() = 'knocker'`. Un closer qui cogne ne verrait pas le polygone de
+-- son propre secteur.
+drop policy if exists secteurs_select_knocker on public.secteurs;
+drop policy if exists secteurs_select_terrain on public.secteurs;
+create policy secteurs_select_terrain on public.secteurs
+  for select to authenticated
+  using (
     (select public.peut_cogner())
     and knocker_id = (select auth.uid())
   );

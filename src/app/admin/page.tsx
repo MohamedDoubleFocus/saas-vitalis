@@ -30,10 +30,10 @@ const OUTILS: readonly Outil[] = [
     icone: Users,
   },
   {
-    href: '/admin/secteurs',
+    href: '/equipe/secteurs',
     titre: 'Secteurs',
     description:
-      'Tracer une zone sur la carte, importer ses rues automatiquement, l’attribuer à un knocker.',
+      'Chercher une adresse, choisir le quartier, importer ses rues et l’attribuer à un knocker.',
     icone: Map,
   },
   {

@@ -1,10 +1,12 @@
+import { ArrowLeft } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { CadrePage } from '@/components/cadre-page'
-import { exigerAdmin } from '@/lib/auth'
+import { exigerManager } from '@/lib/auth'
 import { formaterDateHeure, lireDate } from '@/lib/echeances'
+import { libelleRayon } from '@/lib/quartiers'
 import { polygoneValide, trierRuesSecteur, type Point } from '@/lib/secteurs'
 import { createClient } from '@/lib/supabase/server'
 
@@ -24,7 +26,7 @@ type Props = {
 
 const MESSAGES_ERREUR: Record<string, string> = {
   champs_manquants: 'Secteur manquant.',
-  knocker_invalide: 'Ce profil n’est pas un knocker actif.',
+  knocker_invalide: 'Ce profil n’est pas un knocker actif de ton équipe.',
   maj_impossible: 'La mise à jour a échoué.',
   suppression: 'La suppression a échoué.',
 }
@@ -58,29 +60,37 @@ function lireGeometrie(valeur: unknown): Point[][] {
 export default async function PageSecteur({ params, searchParams }: Props) {
   const { id } = await params
   const { error, ok, avertissement } = await searchParams
-  await exigerAdmin()
+  const session = await exigerManager()
 
   const supabase = await createClient()
 
+  // La RLS décide de la visibilité : un secteur qu'il ne gère pas donne un 404,
+  // exactement comme un secteur inexistant. Aucune fuite d'existence.
   const { data: secteur } = await supabase
     .from('secteurs')
-    .select('id, nom, notes, polygone, knocker_id, created_at')
+    .select(
+      'id, nom, notes, polygone, knocker_id, created_at, osm_type, rayon_metres',
+    )
     .eq('id', id)
     .maybeSingle()
 
   if (!secteur) notFound()
+
+  const requeteKnockers = supabase
+    .from('profiles')
+    .select('id, nom_complet')
+    .eq('role', 'knocker')
+    .eq('actif', true)
+    .order('nom_complet', { ascending: true })
 
   const [{ data: ruesBrutes }, { data: knockers }] = await Promise.all([
     supabase
       .from('territoires')
       .select('id, nom_rue, complete, geometrie')
       .eq('secteur_id', id),
-    supabase
-      .from('profiles')
-      .select('id, nom_complet')
-      .eq('role', 'knocker')
-      .eq('actif', true)
-      .order('nom_complet', { ascending: true }),
+    session.estManager
+      ? requeteKnockers.eq('manager_id', session.userId)
+      : requeteKnockers,
   ])
 
   const rues: RueTracee[] = trierRuesSecteur(
@@ -94,6 +104,12 @@ export default async function PageSecteur({ params, searchParams }: Props) {
 
   const polygone = polygoneValide(secteur.polygone) ? secteur.polygone : []
   const cree = lireDate(secteur.created_at)
+
+  const origine = secteur.osm_type
+    ? 'Quartier OpenStreetMap'
+    : secteur.rayon_metres
+      ? `Rayon de ${libelleRayon(secteur.rayon_metres)} autour d’une adresse`
+      : 'Zone tracée à la main'
 
   return (
     <CadrePage titre={secteur.nom} largeur="gestion">
@@ -125,8 +141,12 @@ export default async function PageSecteur({ params, searchParams }: Props) {
           </p>
         )}
 
-        <Link href="/admin/secteurs" className="text-sm text-grey-text underline">
-          ← Tous les secteurs
+        <Link
+          href="/equipe/secteurs"
+          className="inline-flex min-h-11 items-center gap-2 self-start text-sm font-semibold text-brand-strong"
+        >
+          <ArrowLeft className="size-5" aria-hidden />
+          Tous les secteurs
         </Link>
 
         {/* --- Attribution ------------------------------------------------ */}
@@ -167,17 +187,16 @@ export default async function PageSecteur({ params, searchParams }: Props) {
             </button>
           </form>
 
-          {cree && (
-            <p className="mt-2 text-xs text-grey-text">
-              Créé le {formaterDateHeure(cree)}
-            </p>
-          )}
+          <p className="mt-2 text-xs text-grey-text">
+            {origine}
+            {cree && ` · créé le ${formaterDateHeure(cree)}`}
+          </p>
         </section>
 
         {/* --- Carte et checklist ----------------------------------------- */}
         {polygone.length === 0 ? (
           <p className="rounded-2xl bg-white p-4 text-sm text-red-800 shadow-card">
-            Le polygone de ce secteur est illisible. Recrée-le.
+            Le contour de ce secteur est illisible. Recrée-le.
           </p>
         ) : (
           <VueSecteur polygone={polygone} ruesInitiales={rues} />

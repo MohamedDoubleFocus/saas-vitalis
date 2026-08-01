@@ -1,6 +1,14 @@
 import 'server-only'
 
 import {
+  idAireOverpass,
+  lireQuartiers,
+  requeteQuartiers,
+  type ElementOsm,
+  type QuartierOsm,
+  type TypeOsm,
+} from './quartiers'
+import {
   fusionnerRues,
   polygoneVersOverpass,
   type Point,
@@ -61,11 +69,33 @@ way["highway"~"^(${TYPES_VOIE})$"]["name"](poly:"${contour}");
 out geom;`
 }
 
+/**
+ * Requête des rues d'une ZONE OSM, par identifiant.
+ *
+ * Préférée au polygone quand le secteur vient d'un quartier : le découpage est
+ * celui d'OpenStreetMap lui-même, au mètre près, sans reconstruction géométrique
+ * de notre part. C'est ce qui permet d'afficher un contour approximatif sans que
+ * les rues importées le soient.
+ */
+function requeteZone(osmId: number, osmType: TypeOsm): string {
+  return `[out:json][timeout:60];
+area(${idAireOverpass(osmId, osmType)})->.zone;
+way["highway"~"^(${TYPES_VOIE})$"]["name"](area.zone);
+out geom;`
+}
+
 type ReponseOverpass = {
   elements?: {
     type?: string
-    tags?: { name?: string }
+    id?: number
+    tags?: Record<string, string | undefined>
     geometry?: { lat?: number; lon?: number }[]
+    /** Relations : la géométrie est portée par les membres. */
+    members?: {
+      type?: string
+      role?: string
+      geometry?: { lat?: number; lon?: number }[]
+    }[]
   }[]
 }
 
@@ -100,47 +130,102 @@ async function interroger(
 }
 
 /**
+ * Interroge les miroirs dans l'ordre, jusqu'à ce que l'un réponde.
+ *
+ * Pas de nouvelle tentative sur un même miroir : s'il est saturé, insister ne
+ * fait qu'aggraver la limitation de débit.
+ *
+ * Lève seulement si TOUS ont échoué, avec le détail de chaque échec — sans ça,
+ * un « Overpass indisponible » ne dit pas s'il s'agit d'un 429, d'un timeout ou
+ * d'une requête malformée.
+ */
+async function essayerMiroirs(
+  requete: string,
+): Promise<{ donnees: ReponseOverpass; miroir: string }> {
+  const echecs: string[] = []
+
+  for (const miroir of MIROIRS) {
+    try {
+      return { donnees: await interroger(miroir, requete), miroir }
+    } catch (erreur) {
+      echecs.push(
+        `${miroir} : ${erreur instanceof Error ? erreur.message : 'erreur inconnue'}`,
+      )
+    }
+  }
+
+  throw new Error(`Aucun miroir Overpass n’a répondu.\n${echecs.join('\n')}`)
+}
+
+/** Traduit les « ways » d'une réponse en rues fusionnées. */
+function ruesDeLaReponse(donnees: ReponseOverpass): RueSecteur[] {
+  const voies: VoieOverpass[] = (donnees.elements ?? [])
+    .filter((element) => element.type === 'way' && element.tags?.name)
+    .map((element) => ({
+      nom: element.tags!.name!,
+      // ⚠️ Overpass dit `lon`, Google Maps dit `lng`. La conversion se fait
+      // ICI, une seule fois — plus loin, tout le code parle `lng`.
+      points: (element.geometry ?? [])
+        .filter(
+          (point): point is { lat: number; lon: number } =>
+            typeof point.lat === 'number' && typeof point.lon === 'number',
+        )
+        .map((point) => ({ lat: point.lat, lng: point.lon })),
+    }))
+
+  return fusionnerRues(voies)
+}
+
+/**
  * Rues nommées à l'intérieur du polygone.
  *
  * Renvoie une liste **vide** — pas une erreur — quand la zone n'a aucune rue :
  * polygone minuscule, secteur rural, données OSM absentes. C'est un cas normal
  * que l'interface signale, pas une panne.
- *
- * Lève seulement si TOUS les miroirs ont échoué.
  */
 export async function ruesDuPolygone(
   polygone: readonly Point[],
 ): Promise<ResultatRues> {
-  const requete = requeteOverpass(polygone)
-  const echecs: string[] = []
+  const { donnees, miroir } = await essayerMiroirs(requeteOverpass(polygone))
 
-  for (const miroir of MIROIRS) {
-    try {
-      const donnees = await interroger(miroir, requete)
+  return { rues: ruesDeLaReponse(donnees), miroir }
+}
 
-      const voies: VoieOverpass[] = (donnees.elements ?? [])
-        .filter((element) => element.type === 'way' && element.tags?.name)
-        .map((element) => ({
-          nom: element.tags!.name!,
-          // ⚠️ Overpass dit `lon`, Google Maps dit `lng`. La conversion se fait
-          // ICI, une seule fois — plus loin, tout le code parle `lng`.
-          points: (element.geometry ?? [])
-            .filter(
-              (point): point is { lat: number; lon: number } =>
-                typeof point.lat === 'number' && typeof point.lon === 'number',
-            )
-            .map((point) => ({ lat: point.lat, lng: point.lon })),
-        }))
+/**
+ * Rues nommées d'une zone OSM, par identifiant.
+ *
+ * À préférer à `ruesDuPolygone` quand le secteur vient d'un quartier : le
+ * découpage est celui d'OSM, pas notre reconstruction du contour.
+ */
+export async function ruesDeLaZone(
+  osmId: number,
+  osmType: TypeOsm,
+): Promise<ResultatRues> {
+  const { donnees, miroir } = await essayerMiroirs(requeteZone(osmId, osmType))
 
-      return { rues: fusionnerRues(voies), miroir }
-    } catch (erreur) {
-      echecs.push(
-        `${miroir} : ${erreur instanceof Error ? erreur.message : 'erreur inconnue'}`,
-      )
-      // Miroir suivant. Pas de nouvelle tentative sur le même : s'il est saturé,
-      // insister ne fait qu'aggraver la limitation de débit.
-    }
+  return { rues: ruesDeLaReponse(donnees), miroir }
+}
+
+export type ResultatQuartiers = {
+  quartiers: QuartierOsm[]
+  miroir: string
+}
+
+/**
+ * Quartiers et zones administratives contenant un point.
+ *
+ * Liste **vide** = OpenStreetMap ne connaît aucun découpage à cet endroit. C'est
+ * fréquent au Québec hors des grands centres : l'interface bascule alors sur le
+ * rayon autour de l'adresse. Ce n'est pas une panne.
+ */
+export async function quartiersAutourDe(
+  lat: number,
+  lng: number,
+): Promise<ResultatQuartiers> {
+  const { donnees, miroir } = await essayerMiroirs(requeteQuartiers(lat, lng))
+
+  return {
+    quartiers: lireQuartiers((donnees.elements ?? []) as ElementOsm[]),
+    miroir,
   }
-
-  throw new Error(`Aucun miroir Overpass n’a répondu.\n${echecs.join('\n')}`)
 }
