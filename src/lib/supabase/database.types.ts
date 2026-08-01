@@ -194,6 +194,7 @@ export type Database = {
           montant_contrat: number | null
           nb_reports: number
           nb_visites: number
+          rappel_sms_envoye_le: string | null
           roofer_id: string | null
           statut: Database["public"]["Enums"]["statut_opp"]
           statut_paiement: Database["public"]["Enums"]["statut_paiement"]
@@ -225,6 +226,7 @@ export type Database = {
           montant_contrat?: number | null
           nb_reports?: number
           nb_visites?: number
+          rappel_sms_envoye_le?: string | null
           roofer_id?: string | null
           statut?: Database["public"]["Enums"]["statut_opp"]
           statut_paiement?: Database["public"]["Enums"]["statut_paiement"]
@@ -256,6 +258,7 @@ export type Database = {
           montant_contrat?: number | null
           nb_reports?: number
           nb_visites?: number
+          rappel_sms_envoye_le?: string | null
           roofer_id?: string | null
           statut?: Database["public"]["Enums"]["statut_opp"]
           statut_paiement?: Database["public"]["Enums"]["statut_paiement"]
@@ -354,6 +357,7 @@ export type Database = {
           google_calendar_id: string | null
           id: string
           nom_complet: string | null
+          openphone_number: string | null
           role: Database["public"]["Enums"]["role_user"]
         }
         Insert: {
@@ -363,6 +367,7 @@ export type Database = {
           google_calendar_id?: string | null
           id: string
           nom_complet?: string | null
+          openphone_number?: string | null
           role: Database["public"]["Enums"]["role_user"]
         }
         Update: {
@@ -372,6 +377,7 @@ export type Database = {
           google_calendar_id?: string | null
           id?: string
           nom_complet?: string | null
+          openphone_number?: string | null
           role?: Database["public"]["Enums"]["role_user"]
         }
         Relationships: [

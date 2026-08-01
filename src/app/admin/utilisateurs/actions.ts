@@ -7,6 +7,7 @@ import { exigerAdmin } from '@/lib/auth'
 import { estRoleUser } from '@/lib/roles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { versE164 } from '@/lib/telephone'
 
 const CHEMIN = '/admin/utilisateurs'
 
@@ -173,6 +174,58 @@ export async function modifierCloser(formData: FormData) {
 
   revalidatePath(CHEMIN)
   redirect(`${CHEMIN}?ok=${closerId ? 'closer_change' : 'closer_retire'}`)
+}
+
+/**
+ * Enregistre le numéro OpenPhone d'un closer — l'expéditeur de ses SMS.
+ *
+ * Normalisé en E.164 avant écriture : la contrainte `check` en base l'exige, et
+ * l'API OpenPhone n'accepte que ce format. Un champ vidé retire le numéro, ce
+ * qui suspend simplement les envois pour ce closer.
+ */
+export async function modifierNumeroOpenPhone(formData: FormData) {
+  await exigerAdmin()
+
+  const profilId = texteOuNull(formData.get('profil_id'))
+  const saisie = texteOuNull(formData.get('openphone_number'))
+
+  if (!profilId) {
+    redirect(`${CHEMIN}?error=champs_manquants`)
+  }
+
+  const numero = saisie ? versE164(saisie) : null
+
+  if (saisie && !numero) {
+    redirect(`${CHEMIN}?error=numero_invalide`)
+  }
+
+  const supabase = await createClient()
+
+  const { data: cible } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profilId)
+    .maybeSingle()
+
+  if (!cible) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  if (cible.role !== 'closer') {
+    redirect(`${CHEMIN}?error=pas_un_closer`)
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ openphone_number: numero })
+    .eq('id', profilId)
+
+  if (error) {
+    redirect(`${CHEMIN}?error=maj_impossible`)
+  }
+
+  revalidatePath(CHEMIN)
+  redirect(`${CHEMIN}?ok=${numero ? 'numero_enregistre' : 'numero_retire'}`)
 }
 
 /**

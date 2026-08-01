@@ -6,7 +6,14 @@ import { LIBELLES_ROLES, ROLES, type RoleUser } from '@/lib/roles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
-import { basculerActif, creerUtilisateur, modifierCloser } from './actions'
+import { formaterTelephone } from '@/lib/telephone'
+
+import {
+  basculerActif,
+  creerUtilisateur,
+  modifierCloser,
+  modifierNumeroOpenPhone,
+} from './actions'
 
 export const metadata: Metadata = {
   title: 'Utilisateurs — Vitalis',
@@ -22,6 +29,7 @@ type ProfilListe = {
   role: RoleUser
   actif: boolean
   closer_id: string | null
+  openphone_number: string | null
 }
 
 /** Option de rattachement : un closer proposable dans les `<select>`. */
@@ -42,6 +50,8 @@ const MESSAGES_ERREUR: Record<string, string> = {
   maj_impossible: 'La mise à jour a échoué. Réessaie.',
   closer_invalide: 'Closer invalide. Choisis un closer actif dans la liste.',
   pas_un_knocker: 'Seul un knocker peut être rattaché à un closer.',
+  pas_un_closer: 'Seul un closer peut avoir un numéro OpenPhone.',
+  numero_invalide: 'Numéro invalide. Attendu : 10 chiffres nord-américains.',
   auth_non_synchronisee:
     'Le profil est à jour et l’accès aux données est déjà coupé, mais la session ouverte n’a pas pu être révoquée. Elle expirera d’elle-même dans l’heure.',
 }
@@ -52,6 +62,8 @@ const MESSAGES_SUCCES: Record<string, string> = {
   reactive: 'Utilisateur réactivé.',
   closer_change: 'Closer rattaché.',
   closer_retire: 'Rattachement au closer retiré.',
+  numero_enregistre: 'Numéro OpenPhone enregistré.',
+  numero_retire: 'Numéro OpenPhone retiré. Ce closer n’enverra plus de SMS.',
 }
 
 const CLASSE_CHAMP =
@@ -139,6 +151,56 @@ function RattachementCloser({
   )
 }
 
+/**
+ * Numéro OpenPhone d'un closer — l'expéditeur de ses SMS au client.
+ *
+ * Champ libre : la server action normalise en E.164 et refuse ce qui n'est pas
+ * un numéro nord-américain. Vider le champ suspend les SMS de ce closer, sans
+ * rien casser d'autre.
+ */
+function NumeroOpenPhone({ profil }: { profil: ProfilListe }) {
+  return (
+    <details>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm text-grey-text transition-colors hover:text-navy">
+        <span>
+          SMS :{' '}
+          <span className="font-medium text-navy">
+            {profil.openphone_number
+              ? formaterTelephone(profil.openphone_number)
+              : 'aucun numéro'}
+          </span>
+        </span>
+      </summary>
+
+      <form action={modifierNumeroOpenPhone} className="mt-1 flex flex-col gap-2">
+        <input type="hidden" name="profil_id" value={profil.id} />
+        <label className="sr-only" htmlFor={`openphone-${profil.id}`}>
+          Numéro OpenPhone
+        </label>
+        <input
+          id={`openphone-${profil.id}`}
+          name="openphone_number"
+          type="tel"
+          inputMode="tel"
+          defaultValue={
+            profil.openphone_number ? formaterTelephone(profil.openphone_number) : ''
+          }
+          placeholder="(514) 555-1234"
+          autoComplete="off"
+          className={CLASSE_CHAMP}
+        />
+        <p className="text-xs text-grey-text">
+          Numéro OpenPhone du closer. Sans lui, aucun SMS ne part pour ses
+          rendez-vous.
+        </p>
+        <button type="submit" className={CLASSE_BOUTON_SECONDAIRE}>
+          Enregistrer le numéro
+        </button>
+      </form>
+    </details>
+  )
+}
+
 /** Bascule actif/inactif, en deux temps et sans modale (CLAUDE.md §6). */
 function ActionActif({ profil }: { profil: ProfilListe }) {
   return (
@@ -183,7 +245,7 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
   const supabase = await createClient()
   const { data: profils } = await supabase
     .from('profiles')
-    .select('id, nom_complet, role, actif, closer_id')
+    .select('id, nom_complet, role, actif, closer_id, openphone_number')
     .order('actif', { ascending: false })
     .order('nom_complet', { ascending: true })
 
@@ -411,6 +473,12 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                     </div>
                   )}
 
+                  {profil.role === 'closer' && (
+                    <div className="mt-2 border-t border-grey-border pt-1">
+                      <NumeroOpenPhone profil={profil} />
+                    </div>
+                  )}
+
                   {!estMoi && (
                     <div className="mt-1">
                       <ActionActif profil={profil} />
@@ -438,7 +506,7 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                     Rôle
                   </th>
                   <th scope="col" className="w-[20%] px-4 py-3">
-                    Closer
+                    Closer / SMS
                   </th>
                   <th scope="col" className="w-[10%] px-4 py-3">
                     État
@@ -481,8 +549,10 @@ export default async function PageUtilisateurs({ searchParams }: Props) {
                             profil={profil}
                             options={optionsPour(profil)}
                           />
+                        ) : profil.role === 'closer' ? (
+                          <NumeroOpenPhone profil={profil} />
                         ) : (
-                          // Un closer, un roofer ou un admin n'a pas de closer.
+                          // Ni rattachement ni SMS pour un roofer ou un admin.
                           <span className="text-sm text-grey-text">—</span>
                         )}
                       </td>

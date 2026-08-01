@@ -183,6 +183,39 @@ async function synchroniserEvenementGoogle(opportuniteId: string): Promise<void>
   }
 }
 
+/**
+ * Demande au serveur d'envoyer le SMS de confirmation au client.
+ *
+ * Même règle que la synchro Google : **jamais bloquant**. Le rendez-vous est
+ * déjà en base ; qu'OpenPhone soit à court de crédits, que le closer n'ait pas
+ * de numéro ou que le réseau ait sauté ne doit rien changer au booking.
+ *
+ * La clé d'API vit exclusivement côté serveur — d'où le passage par une route.
+ */
+async function envoyerSmsConfirmation(opportuniteId: string): Promise<void> {
+  try {
+    await fetch('/api/rdv/sms-confirmation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opportuniteId }),
+    })
+  } catch {
+    // Silencieux par conception — voir le commentaire ci-dessus.
+  }
+}
+
+/**
+ * Ce qui suit un rendez-vous fraîchement booké : l'événement Google et le SMS.
+ *
+ * Les deux partent en parallèle et aucun ne peut faire échouer l'autre.
+ */
+async function apresBooking(opportuniteId: string): Promise<void> {
+  await Promise.allSettled([
+    synchroniserEvenementGoogle(opportuniteId),
+    envoyerSmsConfirmation(opportuniteId),
+  ])
+}
+
 async function creerLead(charge: ChargeCreationLead): Promise<void> {
   const supabase = createClient()
 
@@ -211,7 +244,7 @@ async function creerLead(charge: ChargeCreationLead): Promise<void> {
   await ajouterNote(data.id, charge.note, 'Knocker')
 
   if (charge.dateRdv) {
-    await synchroniserEvenementGoogle(data.id)
+    await apresBooking(data.id)
   }
 }
 
@@ -281,7 +314,7 @@ async function majLead(charge: ChargeCreationLead & { opportuniteId: string }): 
   await ajouterNote(charge.opportuniteId, charge.note, 'Knocker')
 
   if (charge.dateRdv) {
-    await synchroniserEvenementGoogle(charge.opportuniteId)
+    await apresBooking(charge.opportuniteId)
   }
 }
 
