@@ -19,13 +19,31 @@ import { LIBELLES_STATUT } from '@/lib/statuts'
 import { createClient } from '@/lib/supabase/server'
 import { formaterMontant, soldeDu } from '@/lib/vente'
 
+import { Kanban } from './kanban'
+
 export const metadata: Metadata = {
   title: 'Chantiers — Vitalis',
 }
 
 type Props = {
-  searchParams: Promise<{ vue?: string; q?: string }>
+  searchParams: Promise<{ vue?: string; q?: string; error?: string; ok?: string }>
 }
+
+const MESSAGES_ERREUR: Record<string, string> = {
+  champs_manquants: 'Information manquante.',
+  introuvable: 'Chantier introuvable.',
+  transition: 'Cette étape n’est pas autorisée depuis le statut actuel.',
+  maj_impossible: 'La mise à jour a échoué. Réessaie.',
+  roofer_invalide: 'Ce profil n’est pas un roofer actif.',
+}
+
+/**
+ * Colonnes du kanban : les mêmes que les onglets, moins « Tous ».
+ *
+ * « Tous » n'a aucun sens en colonne — il contiendrait la somme des trois
+ * autres. Il reste utile sur mobile, où l'on ne voit qu'un onglet à la fois.
+ */
+const COLONNES = FILTRES_CHANTIER.filter((filtre) => filtre !== 'tous')
 
 const CLASSE_CHAMP =
   'h-11 w-full rounded-lg border border-grey-border bg-white px-3 text-base text-navy outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30'
@@ -45,12 +63,14 @@ const LIMITE = 300
  * Dès qu'un chantier est confié, il en sort et devenait introuvable depuis
  * l'administration. C'est l'écran qui referme la boucle.
  *
- * Lecture seule : assigner se fait toujours depuis l'écran d'assignation, et
- * l'avancement depuis la fiche. Deux endroits pour poser le même geste
- * divergeraient.
+ * Au-dessus de 1024px : un KANBAN, quatre colonnes visibles d'un coup. En
+ * dessous : onglets + liste, §6 interdisant le kanban à cette largeur.
+ *
+ * Pas de glisser-déposer (§6) — voir la note dans `kanban.tsx` : « À assigner →
+ * Planifié » exige de choisir un roofer, ce qu'un dépôt ne sait pas exprimer.
  */
 export default async function PageChantiersAdmin({ searchParams }: Props) {
-  const { vue, q } = await searchParams
+  const { vue, q, error, ok } = await searchParams
   await exigerAdmin()
 
   const filtre = lireFiltreChantier(vue)
@@ -120,26 +140,58 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
       .map((profil) => [profil.id, profil.nom_complet || 'Sans nom']),
   )
 
+  const enrichi = tous.map((c) => ({
+    id: c.id,
+    adresse: c.adresse,
+    ville: c.ville,
+    clientNom: c.client_nom,
+    statut: c.statut,
+    source: c.source,
+    montantContrat: c.montant_contrat,
+    solde: soldeDu(
+      c.montant_contrat,
+      extrasParChantier.get(c.id) ?? [],
+      c.depot_recu,
+    ),
+    rooferId: c.roofer_id,
+    roofer: c.roofer_id ? (nomParRoofer.get(c.roofer_id) ?? null) : null,
+    date: c.date_confirmee ?? c.date_cible_debut ?? null,
+  }))
+
   // Le filtrage est fait ICI et non en base : « à assigner » croise le statut ET
   // l'absence de roofer, et `correspondAuFiltreChantier` est la seule définition
   // de cette règle. La dupliquer en SQL la ferait diverger.
-  const chantiers = tous
-    .filter((c) => correspondAuFiltreChantier(c.statut, c.roofer_id, filtre))
-    .map((c) => ({
-      ...c,
-      solde: soldeDu(
-        c.montant_contrat,
-        extrasParChantier.get(c.id) ?? [],
-        c.depot_recu,
+  const chantiers = enrichi.filter((c) =>
+    correspondAuFiltreChantier(c.statut, c.rooferId, filtre),
+  )
+
+  // Une passe par colonne, à partir du même ensemble déjà enrichi : le kanban
+  // montre tout d'un coup, il ne dépend pas de l'onglet courant.
+  const parColonne = Object.fromEntries(
+    COLONNES.map((colonne) => [
+      colonne,
+      enrichi.filter((c) =>
+        correspondAuFiltreChantier(c.statut, c.rooferId, colonne),
       ),
-      roofer: c.roofer_id ? (nomParRoofer.get(c.roofer_id) ?? null) : null,
-      date: c.date_confirmee ?? c.date_cible_debut ?? null,
-    }))
+    ]),
+  )
+
+  const { data: roofersActifs } = await supabase
+    .from('profiles')
+    .select('id, nom_complet')
+    .eq('role', 'roofer')
+    .eq('actif', true)
+    .order('nom_complet', { ascending: true })
+
+  const roofers = (roofersActifs ?? []).map((roofer) => ({
+    id: roofer.id,
+    nom: roofer.nom_complet || 'Sans nom',
+  }))
 
   const compteurs = Object.fromEntries(
     FILTRES_CHANTIER.map((valeur) => [
       valeur,
-      tous.filter((c) => correspondAuFiltreChantier(c.statut, c.roofer_id, valeur))
+      enrichi.filter((c) => correspondAuFiltreChantier(c.statut, c.rooferId, valeur))
         .length,
     ]),
   ) as Record<FiltreChantier, number>
@@ -149,6 +201,34 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
 
   return (
     <CadrePage titre="Chantiers" largeur="gestion">
+      {error && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
+          {MESSAGES_ERREUR[error] ?? 'Une erreur est survenue.'}
+        </p>
+      )}
+
+      {ok && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-grey-border bg-white px-3 py-2 text-sm text-grey-text"
+        >
+          {ok === 'assigne' ? 'Chantier assigné et planifié.' : 'Statut mis à jour.'}
+        </p>
+      )}
+
+      {roofers.length === 0 && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-grey-border bg-grey-light px-3 py-2 text-sm text-grey-text"
+        >
+          Aucun roofer actif : les chantiers ne peuvent pas être assignés. Crée-en
+          un dans « Utilisateurs ».
+        </p>
+      )}
+
       {/* Recherche : formulaire GET, zéro JS (§6). L'état vit dans l'URL, donc
           il survit au rechargement et se partage. */}
       <form method="get" className="mb-4 flex gap-2">
@@ -173,8 +253,21 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
         </button>
       </form>
 
+      {/* --- Desktop : le kanban, tout d'un coup -------------------------- */}
+      <Kanban
+        colonnes={COLONNES}
+        chantiers={parColonne}
+        roofers={roofers}
+        vue={filtre}
+      />
+
+      {/* --- Sous 1024px : onglets + liste --------------------------------
+          §6 interdit le kanban en dessous de ce seuil. Quatre colonnes sur un
+          téléphone donneraient quatre bandes illisibles ou un scroll horizontal
+          — l'un et l'autre sont exclus. */}
+
       {/* Rail d'onglets : la seule exception au scroll horizontal (§6). */}
-      <nav aria-label="Filtre" className="-mx-4 mb-4 overflow-x-auto px-4">
+      <nav aria-label="Filtre" className="-mx-4 mb-4 overflow-x-auto px-4 lg:hidden">
         <ul className="flex gap-2">
           {FILTRES_CHANTIER.map((valeur) => {
             const actif = valeur === filtre
@@ -205,16 +298,17 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
         </ul>
       </nav>
 
-      {chantiers.length === 0 ? (
-        <p className="rounded-2xl bg-white p-4 text-sm text-grey-text shadow-card">
-          {recherche
-            ? `Aucun chantier ne correspond à « ${recherche} » dans cet onglet.`
-            : `Aucun chantier dans « ${LIBELLES_FILTRE_CHANTIER[filtre]} ».`}
-        </p>
-      ) : (
-        <>
-          {/* Mobile : cartes, deux lignes d'info (§6). */}
-          <ul className="flex flex-col gap-3 lg:hidden">
+      {/* Liste mobile uniquement : au-dessus de 1024px, le kanban a pris la
+          place et montre les quatre colonnes d'un coup. */}
+      <div className="lg:hidden">
+        {chantiers.length === 0 ? (
+          <p className="rounded-2xl bg-white p-4 text-sm text-grey-text shadow-card">
+            {recherche
+              ? `Aucun chantier ne correspond à « ${recherche} » dans cet onglet.`
+              : `Aucun chantier dans « ${LIBELLES_FILTRE_CHANTIER[filtre]} ».`}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
             {chantiers.map((chantier) => (
               <li key={chantier.id}>
                 <Link
@@ -224,12 +318,12 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-2">
                       <span className="min-w-0 truncate font-display text-base font-semibold text-navy">
-                        {chantier.client_nom || chantier.adresse}
+                        {chantier.clientNom || chantier.adresse}
                       </span>
                       <span className="shrink-0 font-display text-base font-bold text-navy">
-                        {chantier.montant_contrat === null
+                        {chantier.montantContrat === null
                           ? '—'
-                          : formaterMontant(chantier.montant_contrat)}
+                          : formaterMontant(chantier.montantContrat)}
                       </span>
                     </span>
 
@@ -258,95 +352,8 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
               </li>
             ))}
           </ul>
-
-          {/* Desktop : le tableau occupe la largeur. `table-fixed` + `truncate`
-              garantissent qu'aucune colonne ne déborde (§6). */}
-          <div className="hidden overflow-hidden rounded-2xl bg-white shadow-card lg:block">
-            <table className="w-full table-fixed">
-              <thead>
-                <tr className="border-b border-grey-border text-left text-xs font-semibold tracking-wide text-grey-text uppercase">
-                  <th scope="col" className="w-[20%] px-4 py-3">
-                    Client
-                  </th>
-                  <th scope="col" className="w-[22%] px-4 py-3">
-                    Adresse
-                  </th>
-                  <th scope="col" className="w-[15%] px-4 py-3">
-                    Statut
-                  </th>
-                  <th scope="col" className="w-[14%] px-4 py-3">
-                    Roofer
-                  </th>
-                  <th scope="col" className="w-[10%] px-4 py-3">
-                    Date
-                  </th>
-                  <th scope="col" className="w-[10%] px-4 py-3 text-right">
-                    Contrat
-                  </th>
-                  <th scope="col" className="w-[9%] px-4 py-3 text-right">
-                    Solde
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {chantiers.map((chantier) => (
-                  <tr
-                    key={chantier.id}
-                    className="border-b border-grey-border align-top last:border-0"
-                  >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/chantiers/${chantier.id}`}
-                        className="flex items-center gap-1 font-medium text-navy transition-colors hover:text-brand-strong"
-                      >
-                        <span className="truncate">
-                          {chantier.client_nom || 'Sans nom'}
-                        </span>
-                        <ChevronRight
-                          className="size-4 shrink-0 text-grey-text"
-                          aria-hidden
-                        />
-                      </Link>
-                      {!estSourcePorte(chantier.source) && (
-                        <span className="text-xs text-grey-text">
-                          {LIBELLES_SOURCE[chantier.source]}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="block truncate text-sm text-grey-text">
-                        {[chantier.adresse, chantier.ville].filter(Boolean).join(', ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <BadgeStatut statut={chantier.statut} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="block truncate text-sm text-navy">
-                        {chantier.roofer ?? (
-                          <span className="text-grey-text">Non assigné</span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-grey-text">
-                      {chantier.date ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-navy">
-                      {chantier.montant_contrat === null
-                        ? '—'
-                        : formaterMontant(chantier.montant_contrat)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-navy">
-                      {formaterMontant(chantier.solde)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+        )}
+      </div>
 
       {tous.length >= LIMITE && (
         <p className="mt-3 text-xs text-grey-text">

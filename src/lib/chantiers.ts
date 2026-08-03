@@ -54,6 +54,59 @@ export const LIBELLES_TRANSITION: Record<string, string> = {
   planifie: 'Planifier',
   en_cours: 'Démarrer les travaux',
   complete: 'Marquer terminé',
+  facture: 'Facturer',
+  paye: 'Marquer payé',
+}
+
+/**
+ * Transitions qu'un ADMIN peut poser depuis un statut donné.
+ *
+ * Va plus loin que le roofer : `facture` et `paye` closent le cycle et ne
+ * concernent que l'administration. Jusqu'ici aucun écran ne les posait — un
+ * chantier terminé restait terminé pour toujours.
+ *
+ * ⚠️ `vendu` ne renvoie RIEN, volontairement. Passer un chantier vendu à
+ * « planifié » demande de choisir un roofer : ce n'est pas une transition de
+ * statut, c'est une assignation. Elle a son propre formulaire.
+ *
+ * Une étape à la fois, en avant comme en arrière (CLAUDE.md §6).
+ */
+export function transitionsAdmin(statut: StatutOpp): StatutOpp[] {
+  switch (statut) {
+    case 'planifie':
+      return ['en_cours']
+    case 'en_cours':
+      return ['complete', 'planifie']
+    case 'complete':
+      return ['facture', 'en_cours']
+    case 'facture':
+      return ['paye', 'complete']
+    case 'paye':
+      return ['facture']
+    default:
+      return []
+  }
+}
+
+export function transitionAdminAutorisee(
+  depuis: StatutOpp,
+  vers: StatutOpp,
+): boolean {
+  return transitionsAdmin(depuis).includes(vers)
+}
+
+/**
+ * Retour en arrière dans la chaîne COMPLÈTE du chantier.
+ *
+ * `estRetourEnArriere` ne connaît que la chaîne du roofer, qui s'arrête à
+ * `complete` : elle renverrait `false` pour « facturé → complété », qui est
+ * pourtant bien une correction.
+ */
+export function estRetourChantier(depuis: StatutOpp, vers: StatutOpp): boolean {
+  const ordre = STATUTS_CHANTIER.indexOf(depuis)
+  const cible = STATUTS_CHANTIER.indexOf(vers)
+
+  return ordre !== -1 && cible !== -1 && cible < ordre
 }
 
 /**

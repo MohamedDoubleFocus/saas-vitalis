@@ -8,7 +8,10 @@ import {
   FILTRES_CHANTIER,
   lireFiltreChantier,
   nettoyerRecherche,
+  estRetourChantier,
   STATUTS_CHANTIER,
+  transitionAdminAutorisee,
+  transitionsAdmin,
   transitionRooferAutorisee,
   transitionsRoofer,
   trierJobs,
@@ -241,5 +244,67 @@ describe('nettoyerRecherche', () => {
   it('tolère une recherche vide', () => {
     expect(nettoyerRecherche('')).toBe('')
     expect(nettoyerRecherche('   ')).toBe('')
+  })
+})
+
+describe('transitionsAdmin', () => {
+  it('va plus loin que le roofer : facturé puis payé', () => {
+    expect(transitionsAdmin('complete')).toContain('facture')
+    expect(transitionsAdmin('facture')).toContain('paye')
+  })
+
+  it('ne propose RIEN depuis « vendu » — il faut d’abord un roofer', () => {
+    // Passer à « planifié » n'est pas une transition de statut mais une
+    // assignation : elle a son propre formulaire.
+    expect(transitionsAdmin('vendu')).toEqual([])
+  })
+
+  it('avance d’une seule étape', () => {
+    expect(transitionsAdmin('planifie')).toEqual(['en_cours'])
+    expect(transitionsAdmin('complete')).not.toContain('paye')
+    expect(transitionsAdmin('planifie')).not.toContain('complete')
+  })
+
+  it('permet la correction d’un pas en arrière', () => {
+    expect(transitionsAdmin('en_cours')).toContain('planifie')
+    expect(transitionsAdmin('facture')).toContain('complete')
+    expect(transitionsAdmin('paye')).toContain('facture')
+  })
+
+  it('ne propose rien hors du cycle de chantier', () => {
+    for (const statut of ['absent', 'refus', 'repasser', 'rdv', 'perdu'] as const) {
+      expect(transitionsAdmin(statut)).toEqual([])
+    }
+  })
+})
+
+describe('transitionAdminAutorisee', () => {
+  it('accepte les pas légitimes', () => {
+    expect(transitionAdminAutorisee('complete', 'facture')).toBe(true)
+    expect(transitionAdminAutorisee('facture', 'paye')).toBe(true)
+  })
+
+  it('refuse de sauter une étape ou de sortir du cycle', () => {
+    expect(transitionAdminAutorisee('complete', 'paye')).toBe(false)
+    expect(transitionAdminAutorisee('vendu', 'planifie')).toBe(false)
+    expect(transitionAdminAutorisee('paye', 'perdu')).toBe(false)
+  })
+})
+
+describe('estRetourChantier', () => {
+  it('reconnaît une correction sur toute la chaîne, pas seulement celle du roofer', () => {
+    // `estRetourEnArriere` s'arrête à `complete` et manquerait ce cas.
+    expect(estRetourChantier('facture', 'complete')).toBe(true)
+    expect(estRetourChantier('paye', 'facture')).toBe(true)
+    expect(estRetourEnArriere('facture', 'complete')).toBe(false)
+  })
+
+  it('distingue une avancée', () => {
+    expect(estRetourChantier('complete', 'facture')).toBe(false)
+    expect(estRetourChantier('planifie', 'en_cours')).toBe(false)
+  })
+
+  it('renvoie false hors de la chaîne', () => {
+    expect(estRetourChantier('rdv', 'vendu')).toBe(false)
   })
 })

@@ -198,8 +198,18 @@ export async function assignerRoofer(formData: FormData) {
   const rooferId = texteOuNull(formData.get('roofer_id'))
   const dateConfirmee = texteOuNull(formData.get('date_confirmee'))
 
+  /**
+   * Écran d'où vient la demande, pour y revenir.
+   *
+   * Liste FERMÉE de deux chemins connus, pas la valeur brute du formulaire :
+   * `redirect()` suit ce qu'on lui donne, et un champ caché se falsifie — ce
+   * serait une redirection ouverte offerte à qui sait poster un formulaire.
+   */
+  const retour =
+    formData.get('retour') === 'chantiers' ? '/admin/chantiers' : CHEMIN
+
   if (!opportuniteId || !rooferId) {
-    redirect(`${CHEMIN}?error=champs_manquants`)
+    redirect(`${retour}?error=champs_manquants`)
   }
 
   const supabase = await createClient()
@@ -215,7 +225,7 @@ export async function assignerRoofer(formData: FormData) {
     .maybeSingle()
 
   if (!roofer) {
-    redirect(`${CHEMIN}?error=roofer_invalide`)
+    redirect(`${retour}?error=roofer_invalide`)
   }
 
   const { error } = await supabase
@@ -230,7 +240,7 @@ export async function assignerRoofer(formData: FormData) {
     .eq('id', opportuniteId)
 
   if (error) {
-    redirect(`${CHEMIN}?error=maj_impossible`)
+    redirect(`${retour}?error=maj_impossible`)
   }
 
   // Piste d'audit (§4.10) : une ligne par fait, dans le fil chronologique.
@@ -253,5 +263,6 @@ export async function assignerRoofer(formData: FormData) {
   await supabase.from('notes').insert(lignes)
 
   revalidatePath(CHEMIN)
-  redirect(`${CHEMIN}?ok=assigne`)
+  revalidatePath('/admin/chantiers')
+  redirect(`${retour}?ok=assigne`)
 }
