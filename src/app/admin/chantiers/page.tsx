@@ -200,7 +200,7 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
     `/admin/chantiers?vue=${valeur}${recherche ? `&q=${encodeURIComponent(recherche)}` : ''}`
 
   return (
-    <CadrePage titre="Chantiers" largeur="gestion">
+    <CadrePage titre="Chantiers" largeur="pleine">
       {error && (
         <p
           role="alert"
@@ -231,7 +231,9 @@ export default async function PageChantiersAdmin({ searchParams }: Props) {
 
       {/* Recherche : formulaire GET, zéro JS (§6). L'état vit dans l'URL, donc
           il survit au rechargement et se partage. */}
-      <form method="get" className="mb-4 flex gap-2">
+      {/* Le champ ne suit PAS la pleine largeur : un champ de recherche de
+          1800px de long est plus dur à viser qu'utile. */}
+      <form method="get" className="mb-4 flex gap-2 lg:max-w-2xl">
         <input type="hidden" name="vue" value={filtre} />
         <label className="sr-only" htmlFor="q">
           Rechercher une adresse, une ville ou un client

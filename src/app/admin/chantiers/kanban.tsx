@@ -64,7 +64,7 @@ export function Kanban({
   vue: string
 }) {
   return (
-    <div className="hidden gap-4 lg:grid lg:grid-cols-4">
+    <div className="hidden gap-3 lg:grid lg:grid-cols-4">
       {colonnes.map((colonne) => {
         const cartes = chantiers[colonne] ?? []
 
@@ -75,7 +75,7 @@ export function Kanban({
             className="flex min-w-0 flex-col rounded-2xl border border-grey-border bg-grey-light/60"
           >
             <header className="flex items-center justify-between gap-2 border-b border-grey-border px-3 py-2">
-              <h2 className="truncate font-display text-base font-semibold text-navy">
+              <h2 className="truncate font-display text-sm font-semibold text-navy">
                 {LIBELLES_FILTRE_CHANTIER[colonne]}
               </h2>
               <span
@@ -87,7 +87,7 @@ export function Kanban({
 
             {/* Hauteur bornée : quatre colonnes de longueurs très inégales
                 feraient scroller toute la page pour lire la plus longue. */}
-            <ul className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto p-2">
+            <ul className="flex max-h-[72vh] flex-col gap-1.5 overflow-y-auto p-1.5">
               {cartes.length === 0 ? (
                 <li className="px-2 py-6 text-center text-sm text-grey-text">
                   Aucun chantier
@@ -125,9 +125,9 @@ function Carte({
   const transitions = transitionsAdmin(carte.statut)
 
   return (
-    <li className="rounded-xl border border-grey-border bg-white p-3 shadow-card">
+    <li className="rounded-xl border border-grey-border bg-white p-2.5 shadow-card">
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate font-display text-base font-semibold text-navy">
+        <p className="min-w-0 truncate font-display text-sm font-semibold text-navy">
           {carte.clientNom || carte.adresse}
         </p>
         <span className="shrink-0 text-sm font-bold text-navy">
@@ -141,7 +141,7 @@ function Carte({
         {[carte.adresse, carte.ville].filter(Boolean).join(', ')}
       </p>
 
-      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-grey-text">
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-grey-text">
         <span className="inline-flex items-center gap-1">
           <IconeStatut statut={carte.statut} className="size-4" />
           {LIBELLES_STATUT[carte.statut]}
@@ -153,27 +153,35 @@ function Carte({
             {LIBELLES_SOURCE[carte.source]}
           </span>
         )}
+        {carte.solde > 0 && (
+          <span>
+            Solde{' '}
+            <span className="font-semibold text-navy">
+              {formaterMontant(carte.solde)}
+            </span>
+          </span>
+        )}
       </p>
 
-      {carte.solde > 0 && (
-        <p className="mt-1 text-xs text-grey-text">
-          Solde : <span className="font-semibold text-navy">{formaterMontant(carte.solde)}</span>
-        </p>
-      )}
-
-      <div className="mt-2 flex flex-col gap-1.5 border-t border-grey-border pt-2">
+      {/* Actions compactes.
+          `h-8`/`h-9` et non `min-h-11` : la cible tactile de 44px (§6) vise le
+          doigt sur un téléphone. Ce kanban est `hidden lg:grid` — il ne s'affiche
+          qu'au-dessus de 1024px, à la souris. Garder 44px ici ferait des boutons
+          plus hauts que la carte elle-même. La règle mobile reste intacte
+          partout ailleurs. */}
+      <div className="mt-1.5 flex flex-col gap-1 border-t border-grey-border pt-1.5">
         <Link
           href={`/chantiers/${carte.id}`}
-          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-strong"
+          className="inline-flex h-8 items-center gap-1 text-xs font-semibold text-brand-strong"
         >
           Ouvrir
-          <ChevronRight className="size-5" aria-hidden />
+          <ChevronRight className="size-4" aria-hidden />
         </Link>
 
         {/* « À assigner » n'avance pas par un bouton de statut : il lui faut un
             roofer. C'est le seul cas où la carte porte un formulaire. */}
         {colonne === 'a_assigner' ? (
-          <form action={assignerRoofer} className="flex flex-col gap-1.5">
+          <form action={assignerRoofer} className="flex gap-1">
             <input type="hidden" name="opportunite_id" value={carte.id} />
             <input type="hidden" name="retour" value="chantiers" />
             <label className="sr-only" htmlFor={`roofer-${carte.id}`}>
@@ -184,10 +192,10 @@ function Carte({
               name="roofer_id"
               required
               defaultValue=""
-              className="h-11 w-full rounded-lg border border-grey-border bg-white px-2 text-sm text-navy outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-grey-border bg-white px-2 text-xs text-navy outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
             >
               <option value="" disabled>
-                Choisir un roofer…
+                Roofer…
               </option>
               {roofers.map((roofer) => (
                 <option key={roofer.id} value={roofer.id}>
@@ -198,7 +206,7 @@ function Carte({
             <button
               type="submit"
               disabled={roofers.length === 0}
-              className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
+              className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
             >
               Assigner
               <ArrowRight className="size-4" aria-hidden />
@@ -217,8 +225,8 @@ function Carte({
                   type="submit"
                   className={
                     retourEnArriere
-                      ? 'flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-grey-border px-3 text-sm font-medium text-grey-text transition-colors hover:bg-grey-light'
-                      : 'flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-hover'
+                      ? 'flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-grey-border px-2 text-xs font-medium text-grey-text transition-colors hover:bg-grey-light'
+                      : 'flex h-9 w-full items-center justify-center gap-1 rounded-lg bg-brand px-2 text-xs font-semibold text-white transition-colors hover:bg-brand-hover'
                   }
                 >
                   {retourEnArriere ? (

@@ -3,7 +3,7 @@ import { profilCourant } from '@/lib/auth'
 import { LIBELLES_ROLES } from '@/lib/roles'
 
 /** Régime de largeur, calqué sur les deux zones de l'app (CLAUDE.md §3). */
-export type Largeur = 'terrain' | 'gestion'
+export type Largeur = 'terrain' | 'gestion' | 'pleine'
 
 /**
  * Largeur du conteneur par zone (CLAUDE.md §6). Seul endroit du code où cette
@@ -19,6 +19,13 @@ const CLASSES_LARGEUR: Record<Largeur, string> = {
   // Mobile d'abord, puis on ouvre à partir de `lg` (1024px) — le seuil à partir
   // duquel le kanban redevient permis.
   gestion: 'max-w-[440px] lg:max-w-5xl',
+  // Pleine largeur au-delà de `lg`, pour les écrans qui EXPLOITENT vraiment
+  // l'espace : un kanban à quatre colonnes étranglé dans 1024px donnerait des
+  // colonnes de 240px, où chaque adresse serait tronquée.
+  //
+  // ⚠️ `max-w-[440px]` sous `lg` reste intact, sans exception : la contrainte
+  // mobile de §6 ne se négocie pas, c'est seulement le plafond desktop qui saute.
+  pleine: 'max-w-[440px] lg:max-w-none',
 }
 
 type Props = {
