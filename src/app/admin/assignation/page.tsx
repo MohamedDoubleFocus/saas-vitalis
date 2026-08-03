@@ -1,11 +1,14 @@
+import { PlusCircle } from 'lucide-react'
 import type { Metadata } from 'next'
 
 import { CadrePage } from '@/components/cadre-page'
 import { exigerAdmin } from '@/lib/auth'
+import { estSourcePorte, LIBELLES_SOURCE } from '@/lib/sources'
 import { createClient } from '@/lib/supabase/server'
 import { formaterMontant } from '@/lib/vente'
 
 import { assignerRoofer } from './actions'
+import { FormulaireVenteDirecte } from './formulaire-vente-directe'
 
 export const metadata: Metadata = {
   title: 'Assignation des chantiers — Vitalis',
@@ -37,24 +40,35 @@ export default async function PageAssignation({ searchParams }: Props) {
 
   const supabase = await createClient()
 
-  const [{ data: aAssigner }, { data: roofers }] = await Promise.all([
-    supabase
-      .from('opportunites')
-      .select(
-        'id, adresse, ville, client_nom, montant_contrat, date_cible_debut, date_cible_fin, vendu_le',
-      )
-      .eq('statut', 'vendu')
-      .is('roofer_id', null)
-      .order('vendu_le', { ascending: true }),
-    supabase
-      .from('profiles')
-      .select('id, nom_complet')
-      .eq('role', 'roofer')
-      .eq('actif', true)
-      .order('nom_complet', { ascending: true }),
-  ])
+  const [{ data: aAssigner }, { data: roofers }, { data: closers }] =
+    await Promise.all([
+      supabase
+        .from('opportunites')
+        .select(
+          'id, adresse, ville, client_nom, montant_contrat, date_cible_debut, date_cible_fin, vendu_le, source',
+        )
+        .eq('statut', 'vendu')
+        .is('roofer_id', null)
+        .order('vendu_le', { ascending: true }),
+      supabase
+        .from('profiles')
+        .select('id, nom_complet')
+        .eq('role', 'roofer')
+        .eq('actif', true)
+        .order('nom_complet', { ascending: true }),
+      supabase
+        .from('profiles')
+        .select('id, nom_complet')
+        .eq('role', 'closer')
+        .eq('actif', true)
+        .order('nom_complet', { ascending: true }),
+    ])
 
   const listeRoofers = roofers ?? []
+  const listeClosers = (closers ?? []).map((closer) => ({
+    id: closer.id,
+    nom: closer.nom_complet || 'Sans nom',
+  }))
 
   return (
     <CadrePage titre="Assignation des chantiers" largeur="gestion">
@@ -85,10 +99,31 @@ export default async function PageAssignation({ searchParams }: Props) {
         </p>
       )}
 
+      {/* --- Vente hors porte-à-porte --------------------------------------
+          Repliée par défaut : c'est le cas minoritaire, la liste d'assignation
+          reste ce qu'on vient voir en premier. Dépliant `<details>` plutôt que
+          modale (CLAUDE.md §6). */}
+      <details className="mb-5 rounded-2xl bg-white shadow-card">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2 font-display text-base font-semibold text-navy">
+          <PlusCircle className="size-6 text-grey-text" aria-hidden />
+          Enregistrer une vente hors porte-à-porte
+        </summary>
+
+        <div className="border-t border-grey-border p-4">
+          <p className="mb-4 text-sm text-grey-text">
+            Référence d’un client, appel entrant, salon : une vente qui n’est
+            jamais passée par une porte cognée. Elle rejoint la liste
+            d’assignation ci-dessous une fois enregistrée.
+          </p>
+
+          <FormulaireVenteDirecte closers={listeClosers} />
+        </div>
+      </details>
+
       {(aAssigner ?? []).length === 0 ? (
         <p className="rounded-2xl bg-white p-4 text-sm text-grey-text shadow-card">
           Aucun chantier en attente d’assignation. Ils apparaissent ici dès qu’un
-          closer conclut une vente.
+          closer conclut une vente, ou dès que tu en enregistres une ci-dessus.
         </p>
       ) : (
         <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4">
@@ -108,6 +143,15 @@ export default async function PageAssignation({ searchParams }: Props) {
               <p className="mt-0.5 truncate text-sm text-grey-text">
                 {[chantier.adresse, chantier.ville].filter(Boolean).join(', ')}
               </p>
+
+              {/* Le porte-à-porte est le cas normal : on ne le signale pas. On
+                  signale ce qui sort de l'ordinaire, sinon le badge devient du
+                  bruit sur toutes les cartes. */}
+              {!estSourcePorte(chantier.source) && (
+                <span className="mt-1 inline-block rounded-full bg-grey-light px-2 py-0.5 text-xs font-medium text-grey-text">
+                  {LIBELLES_SOURCE[chantier.source]}
+                </span>
+              )}
 
               {(chantier.date_cible_debut || chantier.date_cible_fin) && (
                 <p className="mt-1 text-xs text-grey-text">

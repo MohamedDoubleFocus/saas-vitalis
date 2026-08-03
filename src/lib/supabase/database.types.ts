@@ -196,6 +196,7 @@ export type Database = {
           nb_visites: number
           rappel_sms_envoye_le: string | null
           roofer_id: string | null
+          source: Database["public"]["Enums"]["source_opp"]
           statut: Database["public"]["Enums"]["statut_opp"]
           statut_paiement: Database["public"]["Enums"]["statut_paiement"]
           superficie_pi2: number | null
@@ -228,6 +229,7 @@ export type Database = {
           nb_visites?: number
           rappel_sms_envoye_le?: string | null
           roofer_id?: string | null
+          source?: Database["public"]["Enums"]["source_opp"]
           statut?: Database["public"]["Enums"]["statut_opp"]
           statut_paiement?: Database["public"]["Enums"]["statut_paiement"]
           superficie_pi2?: number | null
@@ -260,6 +262,7 @@ export type Database = {
           nb_visites?: number
           rappel_sms_envoye_le?: string | null
           roofer_id?: string | null
+          source?: Database["public"]["Enums"]["source_opp"]
           statut?: Database["public"]["Enums"]["statut_opp"]
           statut_paiement?: Database["public"]["Enums"]["statut_paiement"]
           superficie_pi2?: number | null
@@ -640,6 +643,7 @@ export type Database = {
         | "facture"
         | "paye"
         | "perdu"
+      source_opp: "porte" | "reference" | "entrant" | "autre"
       statut_paiement: "non_paye" | "depot" | "complet"
       type_travail:
         | "traitement_gonano"
@@ -792,6 +796,7 @@ export const Constants = {
         "paye",
         "perdu",
       ],
+      source_opp: ["porte", "reference", "entrant", "autre"],
       statut_paiement: ["non_paye", "depot", "complet"],
       type_travail: [
         "traitement_gonano",
