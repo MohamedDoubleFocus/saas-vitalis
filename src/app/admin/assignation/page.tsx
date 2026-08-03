@@ -1,5 +1,6 @@
-import { PlusCircle } from 'lucide-react'
+import { ChevronRight, PlusCircle } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { CadrePage } from '@/components/cadre-page'
 import { exigerAdmin } from '@/lib/auth'
@@ -72,6 +73,16 @@ export default async function PageAssignation({ searchParams }: Props) {
 
   return (
     <CadrePage titre="Assignation des chantiers" largeur="gestion">
+      {/* Cet écran ne montre QUE la file d'attente. Une fois assigné, un
+          chantier en sort — d'où ce lien vers la vue complète. */}
+      <Link
+        href="/admin/chantiers"
+        className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-strong"
+      >
+        Voir tous les chantiers
+        <ChevronRight className="size-5" aria-hidden />
+      </Link>
+
       {error && (
         <p
           role="alert"
@@ -159,6 +170,17 @@ export default async function PageAssignation({ searchParams }: Props) {
                   {chantier.date_cible_fin ?? '?'}
                 </p>
               )}
+
+              {/* La carte ne montre que ce qu'il faut pour décider d'un roofer.
+                  Le détail complet — volets, extras, argent, fil de notes — est
+                  sur la fiche du chantier. */}
+              <Link
+                href={`/chantiers/${chantier.id}`}
+                className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-strong"
+              >
+                Voir le détail
+                <ChevronRight className="size-5" aria-hidden />
+              </Link>
 
               <form
                 action={assignerRoofer}

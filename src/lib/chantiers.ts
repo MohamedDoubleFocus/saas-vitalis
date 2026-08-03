@@ -67,6 +67,102 @@ export function estRetourEnArriere(depuis: StatutOpp, vers: StatutOpp): boolean 
   return ordre !== -1 && cible !== -1 && cible < ordre
 }
 
+/* -------------------------------------------------------------------------- */
+/* Vue d'administration : TOUS les chantiers, pas seulement ceux à assigner     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Statuts qui font d'une opportunité un chantier.
+ *
+ * `perdu` en est exclu même s'il vient après dans l'ordre de l'enum : une
+ * affaire perdue n'est pas un chantier, et la faire figurer dans une liste de
+ * travaux à suivre serait trompeur.
+ */
+export const STATUTS_CHANTIER: readonly StatutOpp[] = [
+  'vendu',
+  'planifie',
+  'en_cours',
+  'complete',
+  'facture',
+  'paye',
+]
+
+export type FiltreChantier =
+  | 'a_assigner'
+  | 'planifies'
+  | 'en_cours'
+  | 'termines'
+  | 'tous'
+
+/** Ordre des onglets : ce qui demande une action d'abord. */
+export const FILTRES_CHANTIER: readonly FiltreChantier[] = [
+  'a_assigner',
+  'planifies',
+  'en_cours',
+  'termines',
+  'tous',
+]
+
+export const LIBELLES_FILTRE_CHANTIER: Record<FiltreChantier, string> = {
+  a_assigner: 'À assigner',
+  planifies: 'Planifiés',
+  en_cours: 'En cours',
+  termines: 'Terminés',
+  tous: 'Tous',
+}
+
+export function lireFiltreChantier(valeur: string | undefined): FiltreChantier {
+  return FILTRES_CHANTIER.includes(valeur as FiltreChantier)
+    ? (valeur as FiltreChantier)
+    : 'a_assigner'
+}
+
+/**
+ * Un chantier correspond-il à cet onglet ?
+ *
+ * ⚠️ « À assigner » n'est PAS un statut : c'est « vendu ET sans roofer ». Un
+ * chantier vendu déjà confié à quelqu'un ne demande plus rien. C'est pour ça que
+ * cette fonction prend le roofer en plus du statut — un filtre sur le seul
+ * statut se tromperait.
+ */
+export function correspondAuFiltreChantier(
+  statut: StatutOpp,
+  rooferId: string | null,
+  filtre: FiltreChantier,
+): boolean {
+  if (!STATUTS_CHANTIER.includes(statut)) return false
+
+  switch (filtre) {
+    case 'a_assigner':
+      return statut === 'vendu' && rooferId === null
+    case 'planifies':
+      return statut === 'planifie'
+    case 'en_cours':
+      return statut === 'en_cours'
+    case 'termines':
+      return statut === 'complete' || statut === 'facture' || statut === 'paye'
+    case 'tous':
+      return true
+  }
+}
+
+/**
+ * Nettoie une recherche libre avant de la passer à PostgREST.
+ *
+ * ⚠️ `.or()` de PostgREST se lit comme une liste séparée par des VIRGULES, et
+ * `ilike` interprète `%` et `_`. Une recherche contenant une virgule casserait
+ * le filtre ; une recherche valant `%` retournerait tout. On retire donc les
+ * caractères de syntaxe plutôt que de les échapper — dans un champ de recherche
+ * d'adresse, aucun d'eux n'a de valeur pour l'utilisateur.
+ */
+export function nettoyerRecherche(valeur: string): string {
+  return valeur
+    .replace(/[,%_()\\*"']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+}
+
 export type JobTriable = {
   dateConfirmee: string | null
   dateCibleDebut: string | null

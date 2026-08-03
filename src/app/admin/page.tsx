@@ -1,4 +1,11 @@
-import { CalendarDays, HardHat, Map, Users, type LucideIcon } from 'lucide-react'
+import {
+  CalendarDays,
+  ClipboardList,
+  HardHat,
+  Map,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
@@ -40,8 +47,15 @@ const OUTILS: readonly Outil[] = [
     href: '/admin/assignation',
     titre: 'Assignation des chantiers',
     description:
-      'Attribuer une vente signée à un roofer et confirmer la date d’exécution.',
+      'Attribuer une vente signée à un roofer, confirmer la date, ou saisir une vente hors porte-à-porte.',
     icone: HardHat,
+  },
+  {
+    href: '/admin/chantiers',
+    titre: 'Tous les chantiers',
+    description:
+      'Suivre chaque chantier vendu, planifié, en cours ou terminé : montants, soldes et roofer assigné.',
+    icone: ClipboardList,
   },
   {
     href: '/admin/google',

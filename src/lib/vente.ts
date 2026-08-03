@@ -114,6 +114,14 @@ export function soldeDu(
   return auCent((montantContrat ?? 0) + extras - (depotRecu ?? 0))
 }
 
+export type StatutPaiement = Database['public']['Enums']['statut_paiement']
+
+export const LIBELLES_STATUT_PAIEMENT: Record<StatutPaiement, string> = {
+  non_paye: 'Non payé',
+  depot: 'Dépôt reçu',
+  complet: 'Payé en entier',
+}
+
 const FORMAT_CAD = new Intl.NumberFormat('fr-CA', {
   style: 'currency',
   currency: 'CAD',

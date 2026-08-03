@@ -1,8 +1,9 @@
 import { IconeStatut } from '@/components/icones'
 
-import { Navigation, Phone } from 'lucide-react'
+import { ArrowLeft, Navigation, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { CadrePage } from '@/components/cadre-page'
@@ -13,13 +14,16 @@ import {
   transitionsRoofer,
 } from '@/lib/chantiers'
 import { formaterDateHeure, lireDate } from '@/lib/echeances'
+import { estSourcePorte, LIBELLES_SOURCE } from '@/lib/sources'
 import { LIBELLES_STATUT } from '@/lib/statuts'
 import { createClient } from '@/lib/supabase/server'
 import { formaterTelephone, lienTelephone } from '@/lib/telephone'
 import {
   formaterMontant,
   LIBELLES_PRODUIT_GONANO,
+  LIBELLES_STATUT_PAIEMENT,
   LIBELLES_TYPE_TRAVAIL,
+  soldeDu,
 } from '@/lib/vente'
 
 import { avancerStatut, supprimerPhoto } from './actions'
@@ -54,7 +58,17 @@ const MESSAGES_SUCCES: Record<string, string> = {
 export default async function PageChantier({ params, searchParams }: Props) {
   const { id } = await params
   const { error, ok } = await searchParams
-  await exigerSession()
+  const session = await exigerSession()
+
+  /**
+   * L'admin voit l'argent, le roofer non.
+   *
+   * Ce n'est pas une question de sécurité — la RLS laisse le roofer LIRE la
+   * ligne entière, montants compris. C'est une décision d'écran : il vient
+   * exécuter un chantier, pas consulter une facture. Lui afficher le solde dû
+   * ferait de chaque visite une conversation sur l'argent.
+   */
+  const estAdmin = session.role === 'admin'
 
   const supabase = await createClient()
 
@@ -63,7 +77,7 @@ export default async function PageChantier({ params, searchParams }: Props) {
   const { data: job } = await supabase
     .from('opportunites')
     .select(
-      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, statut, superficie_pi2, date_cible_debut, date_cible_fin, date_confirmee, nb_reports',
+      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, client_courriel, statut, superficie_pi2, date_cible_debut, date_cible_fin, date_confirmee, nb_reports, montant_contrat, depot_recu, statut_paiement, source, closer_id, knocker_id, roofer_id, vendu_le',
     )
     .eq('id', id)
     .maybeSingle()
@@ -106,6 +120,38 @@ export default async function PageChantier({ params, searchParams }: Props) {
       .map((s) => [s.path as string, s.signedUrl]),
   )
 
+  /**
+   * Qui a travaillé sur cette affaire — uniquement pour l'admin.
+   *
+   * L'annuaire plutôt que `profiles` : il expose le nom sans le reste, et il
+   * liste AUSSI les profils désactivés. Un knocker parti doit continuer
+   * d'apparaître sur ses anciens dossiers (invariant soft-delete, §4.2), sinon
+   * la traçabilité des commissions se perd au premier départ.
+   */
+  const idsEquipe = [job.closer_id, job.knocker_id, job.roofer_id].filter(
+    (identifiant): identifiant is string => Boolean(identifiant),
+  )
+
+  const { data: annuaire } = estAdmin && idsEquipe.length > 0
+    ? await supabase
+        .from('annuaire_profils')
+        .select('id, nom_complet')
+        .in('id', idsEquipe)
+    : { data: null }
+
+  const nomParId = new Map(
+    (annuaire ?? [])
+      .filter((profil): profil is typeof profil & { id: string } => Boolean(profil.id))
+      .map((profil) => [profil.id, profil.nom_complet || 'Sans nom']),
+  )
+
+  // Solde CALCULÉ, jamais stocké (§4.8) : contrat + extras facturables − dépôt.
+  const solde = soldeDu(
+    job.montant_contrat,
+    (extras ?? []).filter((extra) => extra.facturable),
+    job.depot_recu,
+  )
+
   const destination =
     job.latitude !== null && job.longitude !== null
       ? `${job.latitude},${job.longitude}`
@@ -118,6 +164,18 @@ export default async function PageChantier({ params, searchParams }: Props) {
   return (
     <CadrePage titre={job.client_nom || 'Chantier'} largeur="gestion">
       <div className="flex flex-col gap-4">
+        {/* Le roofer a sa barre de navigation ; l'admin arrive ici depuis
+            l'assignation et n'aurait aucune sortie sans ce lien. */}
+        {estAdmin && (
+          <Link
+            href="/admin/assignation"
+            className="inline-flex min-h-11 items-center gap-2 self-start text-sm font-semibold text-brand-strong"
+          >
+            <ArrowLeft className="size-5" aria-hidden />
+            Assignation des chantiers
+          </Link>
+        )}
+
         {error && (
           <p
             role="alert"
@@ -263,6 +321,83 @@ export default async function PageChantier({ params, searchParams }: Props) {
                 colonne dédiée — elle est plus bas. */}
           </section>
         </div>
+
+        {/* --- Argent et traçabilité — ADMIN SEULEMENT ---------------------- */}
+        {estAdmin && (
+          <section className="rounded-2xl bg-white p-4 shadow-card">
+            <h2 className="font-display text-base font-semibold text-navy">
+              Contrat et traçabilité
+            </h2>
+
+            <div className="mt-3 flex flex-col gap-4 lg:grid lg:grid-cols-2">
+              <dl className="flex flex-col gap-1 text-sm">
+                <Ligne
+                  intitule="Contrat (volets)"
+                  valeur={
+                    job.montant_contrat === null
+                      ? null
+                      : formaterMontant(job.montant_contrat)
+                  }
+                />
+                <Ligne
+                  intitule="Extras facturables"
+                  valeur={formaterMontant(
+                    (extras ?? [])
+                      .filter((extra) => extra.facturable)
+                      .reduce((somme, extra) => somme + extra.montant, 0),
+                  )}
+                />
+                <Ligne
+                  intitule="Dépôt reçu"
+                  valeur={formaterMontant(job.depot_recu)}
+                />
+                <div className="mt-1 flex justify-between gap-3 border-t border-grey-border pt-2">
+                  <dt className="shrink-0 font-semibold text-navy">Solde dû</dt>
+                  <dd className="font-display text-2xl font-bold text-navy">
+                    {formaterMontant(solde)}
+                  </dd>
+                </div>
+                <p className="mt-1 text-xs text-grey-text">
+                  {LIBELLES_STATUT_PAIEMENT[job.statut_paiement]}
+                </p>
+              </dl>
+
+              <dl className="flex flex-col gap-1 text-sm">
+                <Ligne
+                  intitule="Origine"
+                  valeur={LIBELLES_SOURCE[job.source]}
+                />
+                <Ligne
+                  intitule="Closer"
+                  valeur={job.closer_id ? (nomParId.get(job.closer_id) ?? null) : null}
+                />
+                <Ligne
+                  intitule="Knocker"
+                  valeur={
+                    job.knocker_id
+                      ? (nomParId.get(job.knocker_id) ?? null)
+                      : estSourcePorte(job.source)
+                        ? null
+                        : 'Aucun — hors porte-à-porte'
+                  }
+                />
+                <Ligne
+                  intitule="Roofer"
+                  valeur={job.roofer_id ? (nomParId.get(job.roofer_id) ?? null) : null}
+                />
+                <Ligne
+                  intitule="Vendu le"
+                  valeur={
+                    lireDate(job.vendu_le)
+                      ? formaterDateHeure(lireDate(job.vendu_le)!)
+                      : null
+                  }
+                />
+                <Ligne intitule="Courriel" valeur={job.client_courriel} />
+              </dl>
+            </div>
+          </section>
+        )}
 
         {/* --- Avancement --------------------------------------------------- */}
         {transitions.length > 0 && (

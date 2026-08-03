@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  correspondAuFiltreChantier,
   dateDeReference,
   estRetourEnArriere,
   estStatutExecution,
+  FILTRES_CHANTIER,
+  lireFiltreChantier,
+  nettoyerRecherche,
+  STATUTS_CHANTIER,
   transitionRooferAutorisee,
   transitionsRoofer,
   trierJobs,
@@ -153,5 +158,88 @@ describe('trierJobs', () => {
 
   it('tolère une liste vide', () => {
     expect(trierJobs([])).toEqual([])
+  })
+})
+
+describe('lireFiltreChantier', () => {
+  it('accepte les onglets connus', () => {
+    for (const filtre of FILTRES_CHANTIER) {
+      expect(lireFiltreChantier(filtre)).toBe(filtre)
+    }
+  })
+
+  it('retombe sur « à assigner » — l’onglet qui demande une action', () => {
+    expect(lireFiltreChantier(undefined)).toBe('a_assigner')
+    expect(lireFiltreChantier('')).toBe('a_assigner')
+    expect(lireFiltreChantier('vendu')).toBe('a_assigner')
+    expect(lireFiltreChantier('../admin')).toBe('a_assigner')
+  })
+})
+
+describe('correspondAuFiltreChantier', () => {
+  it('« à assigner » exige vendu ET sans roofer', () => {
+    expect(correspondAuFiltreChantier('vendu', null, 'a_assigner')).toBe(true)
+    // Déjà confié : ne demande plus rien.
+    expect(correspondAuFiltreChantier('vendu', 'r-1', 'a_assigner')).toBe(false)
+    expect(correspondAuFiltreChantier('planifie', null, 'a_assigner')).toBe(false)
+  })
+
+  it('sépare planifiés et en cours', () => {
+    expect(correspondAuFiltreChantier('planifie', 'r-1', 'planifies')).toBe(true)
+    expect(correspondAuFiltreChantier('en_cours', 'r-1', 'planifies')).toBe(false)
+    expect(correspondAuFiltreChantier('en_cours', 'r-1', 'en_cours')).toBe(true)
+  })
+
+  it('regroupe complété, facturé et payé sous « terminés »', () => {
+    for (const statut of ['complete', 'facture', 'paye'] as const) {
+      expect(correspondAuFiltreChantier(statut, 'r-1', 'termines')).toBe(true)
+    }
+    expect(correspondAuFiltreChantier('en_cours', 'r-1', 'termines')).toBe(false)
+  })
+
+  it('« tous » couvre exactement les statuts de chantier', () => {
+    for (const statut of STATUTS_CHANTIER) {
+      expect(correspondAuFiltreChantier(statut, null, 'tous')).toBe(true)
+    }
+  })
+
+  it('exclut ce qui n’est pas un chantier, quel que soit l’onglet', () => {
+    // Une affaire perdue ou un lead ne sont pas des travaux à suivre.
+    for (const statut of ['absent', 'refus', 'repasser', 'rdv', 'perdu'] as const) {
+      for (const filtre of FILTRES_CHANTIER) {
+        expect(correspondAuFiltreChantier(statut, null, filtre)).toBe(false)
+      }
+    }
+  })
+})
+
+describe('nettoyerRecherche', () => {
+  it('laisse passer une recherche normale', () => {
+    expect(nettoyerRecherche('12 rue Principale')).toBe('12 rue Principale')
+    expect(nettoyerRecherche('  Tremblay  ')).toBe('Tremblay')
+  })
+
+  it('retire la virgule, qui sépare les conditions de PostgREST', () => {
+    expect(nettoyerRecherche('rue Principale, Granby')).toBe(
+      'rue Principale Granby',
+    )
+  })
+
+  it('retire les jokers de `ilike` — « % » seul retournerait tout', () => {
+    expect(nettoyerRecherche('%')).toBe('')
+    expect(nettoyerRecherche('a%b_c')).toBe('a b c')
+  })
+
+  it('retire les caractères de syntaxe et les guillemets', () => {
+    expect(nettoyerRecherche('(a)*"b"\'c\'')).toBe('a b c')
+  })
+
+  it('borne la longueur', () => {
+    expect(nettoyerRecherche('a'.repeat(300))).toHaveLength(80)
+  })
+
+  it('tolère une recherche vide', () => {
+    expect(nettoyerRecherche('')).toBe('')
+    expect(nettoyerRecherche('   ')).toBe('')
   })
 })
