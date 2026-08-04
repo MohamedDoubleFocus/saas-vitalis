@@ -125,7 +125,11 @@ describe('memeAdresse', () => {
     ).toBe(true)
   })
 
-  it('rapproche par GPS quand les libellés diffèrent', () => {
+  it('IGNORE le GPS : deux libellés différents ne se rapprochent jamais', () => {
+    // Ce test remplace celui qui exigeait l'inverse. La branche GPS existait pour
+    // rattraper « la même porte formatée autrement » — mais Places renvoie
+    // toujours le même libellé pour un même lieu, donc elle ne rattrapait rien
+    // et attrapait les voisins.
     expect(
       memeAdresse(
         {
@@ -141,7 +145,7 @@ describe('memeAdresse', () => {
           longitude: -72.73003,
         }),
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('ne rapproche pas deux maisons voisines distinctes', () => {
@@ -151,7 +155,6 @@ describe('memeAdresse', () => {
         existante({
           id: 'o1',
           adresse: '18 rue du Lac',
-          // ~110 m plus loin : bien au-delà du seuil de 25 m.
           latitude: 45.401,
           longitude: -72.73,
         }),
@@ -159,31 +162,32 @@ describe('memeAdresse', () => {
     ).toBe(false)
   })
 
-  it('ne conclut rien sans GPS ni libellé concordant', () => {
-    expect(
-      memeAdresse(
-        { adresse: '12 Principale St', ville: 'Granby', latitude: null, longitude: null },
-        existante({ id: 'o1', adresse: '12 rue Principale Ouest' }),
-      ),
-    ).toBe(false)
-  })
-
-  it('respecte un seuil personnalisé', () => {
+  it('NE rapproche PAS deux adresses distinctes, même au même point GPS', () => {
+    // Le bug rapporté par le terrain : deux portes voisines partagent souvent le
+    // même point renvoyé par Places. Seul le texte fait foi désormais.
     const candidat = {
-      adresse: 'X',
-      ville: 'Granby',
-      latitude: 45.4,
-      longitude: -72.73,
+      adresse: '1024 Rue de la Rochelle',
+      ville: 'Laval',
+      latitude: 45.6,
+      longitude: -73.7,
     }
     const voisine = existante({
       id: 'o1',
-      adresse: 'Y',
-      latitude: 45.4005,
-      longitude: -72.73,
+      adresse: '1020 Rue de la Rochelle',
+      latitude: 45.6,
+      longitude: -73.7,
     })
 
-    expect(memeAdresse(candidat, voisine, { seuilMetres: 25 })).toBe(false)
-    expect(memeAdresse(candidat, voisine, { seuilMetres: 100 })).toBe(true)
+    expect(memeAdresse(candidat, voisine)).toBe(false)
+  })
+
+  it('rapproche la même adresse même sans aucun GPS', () => {
+    expect(
+      memeAdresse(
+        { adresse: '1024 Rue de la Rochelle', ville: 'Laval', latitude: null, longitude: null },
+        existante({ id: 'o1', adresse: '1024 rue de la Rochelle', ville: 'Laval' }),
+      ),
+    ).toBe(true)
   })
 
   it('ne rapproche pas deux adresses vides', () => {

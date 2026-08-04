@@ -4,14 +4,22 @@ import {
   estPasse,
   formaterDateHeure,
   formaterHeure,
+  heureLocale,
   jourLocalIso,
   joursDEcart,
   libelleEcheance,
   lireDate,
   minuitLocal,
 } from './echeances'
+import { FUSEAU_QUEBEC, instantDepuisLocal } from './fuseau'
 
-/** Construit une date en heure LOCALE, comme le fait le code testé. */
+/**
+ * Construit un instant à partir d'une heure QUÉBÉCOISE.
+ *
+ * ⚠️ Surtout pas `new Date(a, m, j, h)` : ce serait l'heure de la machine qui
+ * exécute les tests. Ils passeraient à Montréal et échoueraient sur une CI en
+ * UTC — exactement le bug qu'on corrige ici.
+ */
 function local(
   annee: number,
   mois: number,
@@ -19,7 +27,7 @@ function local(
   heure = 0,
   minute = 0,
 ): Date {
-  return new Date(annee, mois - 1, jour, heure, minute)
+  return instantDepuisLocal(annee, mois, jour, heure, minute, FUSEAU_QUEBEC)
 }
 
 describe('jourLocalIso', () => {
@@ -39,9 +47,24 @@ describe('minuitLocal', () => {
   it('ramène à minuit sans changer de jour', () => {
     const m = minuitLocal(local(2026, 8, 3, 19, 45))
 
-    expect(m.getHours()).toBe(0)
-    expect(m.getDate()).toBe(3)
-    expect(m.getMonth()).toBe(7)
+    // Assertions dans le fuseau de l'entreprise, jamais via `getHours()` :
+    // celui-ci lirait l'heure de la machine de test.
+    expect(heureLocale(m)).toBe(0)
+    expect(jourLocalIso(m)).toBe('2026-08-03')
+  })
+
+  it('donne bien 4 h UTC en été — le décalage du Québec', () => {
+    // Minuit le 3 août au Québec (EDT, UTC−4) = 04:00 UTC. Vérification en dur :
+    // c'est le décalage exact qui affichait 14 h pour un rendez-vous de 10 h.
+    expect(minuitLocal(local(2026, 8, 3, 19, 45)).toISOString()).toBe(
+      '2026-08-03T04:00:00.000Z',
+    )
+  })
+
+  it('donne 5 h UTC en hiver — le passage à l’heure normale est pris en compte', () => {
+    expect(minuitLocal(local(2026, 1, 15, 12)).toISOString()).toBe(
+      '2026-01-15T05:00:00.000Z',
+    )
   })
 })
 

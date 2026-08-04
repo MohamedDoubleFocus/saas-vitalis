@@ -4,6 +4,7 @@ import { sessionCourante } from '@/lib/auth'
 import { creerEvenement } from '@/lib/google/calendar'
 import { FUSEAU_QUEBEC } from '@/lib/fuseau'
 import { CONFIG_DISPONIBILITES } from '@/lib/google/disponibilites'
+import { titreEvenementRdv } from '@/lib/rdv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { formaterTelephone } from '@/lib/telephone'
 
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
 
   const { data: closer } = await admin
     .from('profiles')
-    .select('google_calendar_id')
+    .select('google_calendar_id, nom_complet')
     .eq('id', opportunite.closer_id)
     .maybeSingle()
 
@@ -121,7 +122,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const evenementId = await creerEvenement(closer.google_calendar_id, {
-      titre: `RDV — ${opportunite.client_nom || adresse || 'Client'}`,
+      titre: titreEvenementRdv({
+        clientNom: opportunite.client_nom,
+        closerNom: closer.nom_complet,
+        adresse: adresse || null,
+      }),
       debut: new Date(opportunite.date_rdv),
       dureeMinutes: CONFIG_DISPONIBILITES.dureeMinutes,
       adresse: adresse || null,

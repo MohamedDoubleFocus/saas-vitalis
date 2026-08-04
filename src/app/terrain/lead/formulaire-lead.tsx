@@ -144,6 +144,17 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
   const doublonEnAttenteDeDecision =
     doublon.statut === 'trouve' && !doublon.accepte
 
+  /**
+   * On ne fusionne que sur MA porte.
+   *
+   * Un doublon désigne désormais forcément la MÊME adresse — la détection ne
+   * compare plus que le texte normalisé. Ajouter une visite écrit donc bien sur
+   * la bonne fiche. La RLS (`opportunites_update_terrain`) refuserait de toute
+   * façon la ligne d'un collègue.
+   */
+  const doublonFusionnable =
+    doublon.statut === 'trouve' && doublon.doublon.estLaMienne
+
   const rdv = statut === 'rdv'
   const telSaisi = clientTel.trim()
   const telInvalide = telSaisi !== '' && !estTelephoneValide(telSaisi)
@@ -169,12 +180,13 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
     setEnregistrement(true)
     setErreur(null)
 
-    // On ne met à jour l'opportunité existante que si elle est à MOI : la RLS
-    // (`opportunites_update_knocker`) refuse la ligne d'un collègue. Sur la porte
-    // d'un autre knocker, on enregistre sa propre opportunité.
+    // On ne met à jour l'opportunité existante que si elle est à MOI — la RLS
+    // (`opportunites_update_terrain`) refuse la ligne d'un collègue — ET si elle
+    // porte la même adresse. Sur la porte d'un autre knocker, ou sur la maison
+    // voisine, on enregistre une opportunité distincte.
     const opportuniteId =
       porteEnCours?.id ??
-      (doublon.statut === 'trouve' && doublon.accepte && doublon.doublon.estLaMienne
+      (doublon.statut === 'trouve' && doublon.accepte && doublonFusionnable
         ? doublon.doublon.opportunite.id
         : null)
 
@@ -315,6 +327,7 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
 
         {doublon.statut === 'trouve' && <AlerteDoublon
           doublon={doublon.doublon}
+          fusionnable={doublonFusionnable}
           accepte={doublon.accepte}
           onContinuer={() =>
             setDoublon({ statut: 'trouve', doublon: doublon.doublon, accepte: true })
@@ -575,14 +588,20 @@ function RappelPorte({ porte }: { porte: PortePrechargee }) {
  *
  * Repasser un absent est un geste normal ; l'objectif est d'éviter de re-cogner
  * une porte fraîchement travaillée sans le savoir.
+ *
+ * `fusionnable` est CALCULÉ PAR LE PARENT et passé ici : c'est la même valeur
+ * qui décide du texte affiché et de l'écriture réelle. La recalculer localement
+ * laisserait l'écran promettre une chose et la base en faire une autre.
  */
 function AlerteDoublon({
   doublon,
+  fusionnable,
   accepte,
   onContinuer,
   onAnnuler,
 }: {
   doublon: DoublonTrouve
+  fusionnable: boolean
   accepte: boolean
   onContinuer: () => void
   onAnnuler: () => void
@@ -600,9 +619,19 @@ function AlerteDoublon({
         {doublon.opportunite.nbVisites === 1 ? 'visite' : 'visites'}.
       </p>
 
+      {/* L'adresse trouvée reste affichée : le knocker voit exactement de quelle
+          porte on lui parle, sans avoir à le déduire. */}
+      <p className="mt-1 text-sm font-medium text-navy">
+        {doublon.opportunite.adresse}
+        {doublon.opportunite.ville ? `, ${doublon.opportunite.ville}` : ''}
+      </p>
+
+      {/* Le libellé suit `fusionnable`, PAS `estLaMienne` : sur la porte voisine,
+          même si elle est à moi, un lead séparé est créé. Promettre « ajouter une
+          visite » puis créer autre chose serait pire que l'alerte elle-même. */}
       {accepte ? (
         <p className="mt-2 text-sm text-grey-text">
-          {doublon.estLaMienne
+          {fusionnable
             ? 'Cette visite sera ajoutée au lead existant.'
             : 'Un lead séparé sera créé à ton nom.'}
         </p>
@@ -613,9 +642,9 @@ function AlerteDoublon({
             onClick={onContinuer}
             className="min-h-11 rounded-lg border border-grey-border bg-white px-4 text-sm font-semibold text-navy transition-colors hover:bg-white/70"
           >
-            {doublon.estLaMienne
+            {fusionnable
               ? 'Continuer — ajouter une visite'
-              : 'Continuer quand même'}
+              : 'Continuer — créer un lead séparé'}
           </button>
           <button
             type="button"

@@ -8,9 +8,29 @@ import {
   obtenirCreneaux,
   type ConfigCreneaux,
 } from './creneaux'
+import { FUSEAU_QUEBEC, instantDepuisLocal, partiesDansFuseau } from './fuseau'
 
+/** Heure lue dans le fuseau de l'ENTREPRISE, jamais via `getHours()`. */
+function heureQc(instant: Date): number {
+  return partiesDansFuseau(instant, FUSEAU_QUEBEC).heure
+}
+
+/** Jour de la semaine dans le fuseau de l'entreprise (0 = dimanche). */
+function jourSemaineQc(instant: Date): number {
+  const p = partiesDansFuseau(instant, FUSEAU_QUEBEC)
+
+  return new Date(Date.UTC(p.annee, p.mois - 1, p.jour)).getUTCDay()
+}
+
+/**
+ * Instant construit à partir d'une heure QUÉBÉCOISE.
+ *
+ * ⚠️ Surtout pas `new Date(a, m, j, h)` : ce serait l'heure de la machine de
+ * test. Les tests passeraient à Montréal et échoueraient sur une CI en UTC —
+ * exactement le bug corrigé ici. Lancer `TZ=UTC npm test` doit rester vert.
+ */
 function local(annee: number, mois: number, jour: number, heure = 0, minute = 0) {
-  return new Date(annee, mois - 1, jour, heure, minute)
+  return instantDepuisLocal(annee, mois, jour, heure, minute, FUSEAU_QUEBEC)
 }
 
 // Lundi 3 août 2026, 9 h du matin.
@@ -23,15 +43,15 @@ describe('genererCreneaux', () => {
     expect(creneaux.length).toBeGreaterThan(0)
 
     for (const creneau of creneaux) {
-      expect(CONFIG_CRENEAUX.heures).toContain(creneau.debut.getHours())
-      expect(CONFIG_CRENEAUX.joursOuvres).toContain(creneau.debut.getDay())
+      expect(CONFIG_CRENEAUX.heures).toContain(heureQc(creneau.debut))
+      expect(CONFIG_CRENEAUX.joursOuvres).toContain(jourSemaineQc(creneau.debut))
       expect(creneau.debut.getMinutes()).toBe(0)
     }
   })
 
   it('couvre la semaine entière, week-end compris', () => {
     // Les closers travaillent 7 jours sur 7.
-    const jours = new Set(genererCreneaux(LUNDI_MATIN).map((c) => c.debut.getDay()))
+    const jours = new Set(genererCreneaux(LUNDI_MATIN).map((c) => jourSemaineQc(c.debut)))
 
     expect(jours.size).toBe(7)
     expect(jours.has(6)).toBe(true) // samedi
@@ -41,7 +61,7 @@ describe('genererCreneaux', () => {
   it('couvre 9 h à 19 h, dernier rendez-vous fini à 20 h', () => {
     const heures = genererCreneaux(LUNDI_MATIN)
       .filter((c) => c.jour === '2026-08-04')
-      .map((c) => c.debut.getHours())
+      .map((c) => heureQc(c.debut))
 
     expect(heures).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
   })
@@ -59,7 +79,7 @@ describe('genererCreneaux', () => {
     const creneaux = genererCreneaux(local(2026, 8, 3, 16, 15))
     const aujourdhui = creneaux.filter((c) => c.jour === '2026-08-03')
 
-    expect(aujourdhui.map((c) => c.debut.getHours())).toEqual([18, 19])
+    expect(aujourdhui.map((c) => heureQc(c.debut))).toEqual([18, 19])
   })
 
   it('ne propose plus rien le jour même passé la dernière heure', () => {
@@ -93,8 +113,8 @@ describe('genererCreneaux', () => {
 
     const creneaux = genererCreneaux(LUNDI_MATIN, config)
 
-    expect(creneaux.every((c) => [0, 6].includes(c.debut.getDay()))).toBe(true)
-    expect(creneaux.every((c) => [9, 12].includes(c.debut.getHours()))).toBe(true)
+    expect(creneaux.every((c) => [0, 6].includes(jourSemaineQc(c.debut)))).toBe(true)
+    expect(creneaux.every((c) => [9, 12].includes(heureQc(c.debut)))).toBe(true)
     // 14 jours à partir du lundi = 2 samedis + 2 dimanches, × 2 heures.
     expect(creneaux).toHaveLength(8)
   })
@@ -237,7 +257,7 @@ describe('obtenirCreneaux', () => {
     )
 
     expect(resultat.creneaux).toHaveLength(1)
-    expect(resultat.creneaux[0].debut.getHours()).toBe(18)
+    expect(heureQc(resultat.creneaux[0].debut)).toBe(18)
   })
 
   it('transmet le closer au serveur', async () => {

@@ -1,8 +1,16 @@
+import {
+  FUSEAU_QUEBEC,
+  instantDepuisLocal,
+  partiesDansFuseau,
+} from '@/lib/fuseau'
+
 /**
  * Créneaux libres = heures ouvrables − occupations du calendrier.
  *
  * Entièrement pur : aucune dépendance à Google, au réseau ni au navigateur. On
  * lui passe les plages occupées, il rend les débuts de créneaux disponibles.
+ *
+ * Le résultat ne dépend PAS du fuseau du processus — voir `creneauxLibres`.
  */
 
 export type Intervalle = {
@@ -52,12 +60,41 @@ export function seChevauchent(a: Intervalle, b: Intervalle): boolean {
 }
 
 /**
+ * Le jour calendaire à `decalage` jours du jour de `instant`, dans le fuseau
+ * de l'entreprise.
+ *
+ * `Date.UTC` normalise les débordements : le 31 + 1 devient le 1er du mois
+ * suivant, changement d'année compris. On lit ensuite le jour de la semaine sur
+ * cette date UTC pure — c'est bien le jour calendaire, sans influence de fuseau.
+ */
+function jourCalendaire(
+  instant: Date,
+  decalage: number,
+): { annee: number; mois: number; jour: number; jourSemaine: number } {
+  const p = partiesDansFuseau(instant, FUSEAU_QUEBEC)
+  const cible = new Date(Date.UTC(p.annee, p.mois - 1, p.jour + decalage))
+
+  return {
+    annee: cible.getUTCFullYear(),
+    mois: cible.getUTCMonth() + 1,
+    jour: cible.getUTCDate(),
+    jourSemaine: cible.getUTCDay(),
+  }
+}
+
+/**
  * Débuts de créneaux disponibles.
  *
- * Les dates sont construites avec `new Date(a, m, j, h)`, donc en heure LOCALE
- * du processus qui appelle. Côté serveur, cela suppose que le fuseau du
- * déploiement est celui de l'entreprise — voir `TZ` dans la configuration
- * Vercel, sans quoi « 9 h » signifierait 9 h UTC, soit 5 h du matin au Québec.
+ * ⚠️ Les instants sont construits par `instantDepuisLocal(...FUSEAU_QUEBEC)`, et
+ * SURTOUT PAS par `new Date(a, m, j, h)`.
+ *
+ * Cette fonction tourne côté serveur (`/api/creneaux`). Sur Vercel, `TZ` vaut
+ * UTC : `new Date(a, m, j, 9)` y construisait 9 h UTC, soit 5 h du matin au
+ * Québec. Le knocker se voyait proposer des créneaux décalés de quatre heures,
+ * et le rendez-vous atterrissait à la mauvaise heure dans l'agenda du closer.
+ *
+ * Le code d'origine dépendait du réglage `TZ` du déploiement. Un fuseau
+ * d'entreprise est un fait métier : il est désormais explicite.
  */
 export function creneauxLibres(
   maintenant: Date,
@@ -71,28 +108,27 @@ export function creneauxLibres(
   const libres: Date[] = []
 
   for (let decalage = 0; decalage < config.joursAvance; decalage++) {
-    const jour = new Date(
-      maintenant.getFullYear(),
-      maintenant.getMonth(),
-      maintenant.getDate() + decalage,
-    )
+    const j = jourCalendaire(maintenant, decalage)
 
-    if (!config.joursOuvres.includes(jour.getDay())) continue
+    if (!config.joursOuvres.includes(j.jourSemaine)) continue
 
     for (let heure = config.heureDebut; heure < config.heureFin; heure++) {
-      const debut = new Date(
-        jour.getFullYear(),
-        jour.getMonth(),
-        jour.getDate(),
+      // Un créneau doit tenir ENTIÈREMENT dans la plage ouvrable. Comparaison
+      // arithmétique sur l'heure locale : l'ancienne version relisait
+      // `fin.getHours()`, donc l'heure du processus — fausse hors du Québec, et
+      // fausse aussi le jour du changement d'heure.
+      if (heure * 60 + config.dureeMinutes > config.heureFin * 60) continue
+
+      const debut = instantDepuisLocal(
+        j.annee,
+        j.mois,
+        j.jour,
         heure,
+        0,
+        FUSEAU_QUEBEC,
       )
 
       const fin = new Date(debut.getTime() + config.dureeMinutes * 60 * 1000)
-
-      // Un créneau doit tenir ENTIÈREMENT dans la plage ouvrable.
-      if (fin.getHours() > config.heureFin || (fin.getHours() === 0 && fin.getDate() !== debut.getDate())) {
-        continue
-      }
 
       if (debut.getTime() < plancher.getTime()) continue
 
@@ -136,21 +172,35 @@ export function lireOccupations(
   return intervalles
 }
 
-/** Fenêtre à interroger auprès de Google, en ISO. */
+/**
+ * Fenêtre à interroger auprès de Google, en ISO.
+ *
+ * Bornée à minuit **du Québec**, pas du serveur : une fenêtre décalée de quatre
+ * heures manquerait les occupations de fin de journée du dernier jour.
+ */
 export function fenetreInterrogation(
   maintenant: Date,
   config: ConfigDisponibilites = CONFIG_DISPONIBILITES,
 ): { debutIso: string; finIso: string } {
-  const debut = new Date(
-    maintenant.getFullYear(),
-    maintenant.getMonth(),
-    maintenant.getDate(),
+  const premier = jourCalendaire(maintenant, 0)
+  const dernier = jourCalendaire(maintenant, config.joursAvance)
+
+  const debut = instantDepuisLocal(
+    premier.annee,
+    premier.mois,
+    premier.jour,
+    0,
+    0,
+    FUSEAU_QUEBEC,
   )
 
-  const fin = new Date(
-    maintenant.getFullYear(),
-    maintenant.getMonth(),
-    maintenant.getDate() + config.joursAvance,
+  const fin = instantDepuisLocal(
+    dernier.annee,
+    dernier.mois,
+    dernier.jour,
+    0,
+    0,
+    FUSEAU_QUEBEC,
   )
 
   return { debutIso: debut.toISOString(), finIso: fin.toISOString() }

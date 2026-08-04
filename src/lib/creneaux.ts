@@ -1,4 +1,11 @@
-import { formaterHeure, formaterJour, jourLocalIso, libelleEcheance } from './echeances'
+import {
+  formaterHeure,
+  formaterJour,
+  heureLocale,
+  jourLocalIso,
+  libelleEcheance,
+} from './echeances'
+import { FUSEAU_QUEBEC, instantDepuisLocal, partiesDansFuseau } from './fuseau'
 
 /**
  * Créneaux de rendez-vous proposés au client, à la porte.
@@ -50,9 +57,13 @@ export const CONFIG_CRENEAUX: ConfigCreneaux = {
 /**
  * Génère les créneaux à partir d'un instant donné.
  *
- * Les dates sont construites avec le constructeur `Date(a, m, j, h)`, donc en
- * heure **locale de l'appareil**. C'est voulu : c'est le téléphone du knocker,
- * sur le terrain, qui définit ce que « 17 h » veut dire.
+ * ⚠️ « 17 h » veut dire 17 h **au Québec**, pas 17 h sur l'appareil.
+ *
+ * L'ancienne version utilisait `new Date(a, m, j, h)` et se fiait au fuseau de
+ * l'appareil. C'était juste sur le téléphone d'un knocker à Granby, et faux
+ * partout ailleurs : un repli calculé sur un serveur en UTC proposait des
+ * créneaux décalés de quatre heures. L'heure d'un rendez-vous est un fait
+ * métier, pas une propriété de la machine qui l'affiche.
  */
 export function genererCreneaux(
   maintenant: Date,
@@ -63,23 +74,22 @@ export function genererCreneaux(
   )
 
   const creneaux: Creneau[] = []
+  const aujourdhui = partiesDansFuseau(maintenant, FUSEAU_QUEBEC)
 
   for (let decalage = 0; decalage < config.joursAvance; decalage++) {
-    const jour = new Date(
-      maintenant.getFullYear(),
-      maintenant.getMonth(),
-      maintenant.getDate() + decalage,
+    // `Date.UTC` normalise les débordements de mois et d'année.
+    const cible = new Date(
+      Date.UTC(aujourdhui.annee, aujourdhui.mois - 1, aujourdhui.jour + decalage),
     )
 
-    if (!config.joursOuvres.includes(jour.getDay())) continue
+    if (!config.joursOuvres.includes(cible.getUTCDay())) continue
+
+    const annee = cible.getUTCFullYear()
+    const mois = cible.getUTCMonth() + 1
+    const jour = cible.getUTCDate()
 
     for (const heure of config.heures) {
-      const debut = new Date(
-        jour.getFullYear(),
-        jour.getMonth(),
-        jour.getDate(),
-        heure,
-      )
+      const debut = instantDepuisLocal(annee, mois, jour, heure, 0, FUSEAU_QUEBEC)
 
       if (debut.getTime() < plancher.getTime()) continue
 
@@ -164,7 +174,9 @@ function versCreneau(iso: string): Creneau | null {
   const jour = jourLocalIso(debut)
 
   return {
-    id: `${jour}T${String(debut.getHours()).padStart(2, '0')}`,
+    // `heureLocale` et non `debut.getHours()` : l'identifiant doit désigner la
+    // même heure pour tout le monde, serveur comme téléphone.
+    id: `${jour}T${String(heureLocale(debut)).padStart(2, '0')}`,
     debut,
     jour,
   }

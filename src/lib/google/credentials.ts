@@ -9,10 +9,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * un Client Component. Le `client_secret` et le jeton de rafraîchissement ne
  * doivent jamais approcher le navigateur.
  *
- * Architecture : un seul compte Google (info@toituresvitalis.ca) porte tous les
- * calendriers. Il y a donc UN jeton de rafraîchissement pour toute
- * l'application, rangé dans `public.google_credentials`, table qu'aucune session
- * ne peut lire (seul `service_role` y accède).
+ * Architecture : UN SEUL compte Google porte tous les calendriers des closers.
+ * Il y a donc un unique jeton de rafraîchissement pour toute l'application,
+ * rangé dans `public.google_credentials`, table qu'aucune session ne peut lire
+ * (seul `service_role` y accède).
+ *
+ * Ce module ne présume RIEN du compte ni de son domaine : il autorise celui qui
+ * se présente au consentement et enregistre son courriel. Le domaine autorisé se
+ * décide dans Google Cloud Console — l'écran de consentement en « Interne » ne
+ * laisse passer que l'organisation propriétaire du projet.
  */
 
 const ID_LIGNE = 'compte_principal'

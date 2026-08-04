@@ -24,18 +24,6 @@ export type OpportuniteProche = AdresseCandidate & {
   knockerId: string | null
 }
 
-export type OptionsDoublon = {
-  /** En deçà de cette distance, deux points sont la même porte. */
-  seuilMetres: number
-}
-
-/**
- * 25 m : assez large pour absorber l'imprécision du GPS d'un téléphone et le
- * fait que Places renvoie le centroïde de la parcelle, assez serré pour ne pas
- * confondre deux maisons voisines (front bâti typique : 12–20 m en banlieue).
- */
-export const OPTIONS_DOUBLON_DEFAUT: OptionsDoublon = { seuilMetres: 25 }
-
 const ACCENTS = /[̀-ͯ]/g
 const PONCTUATION = /[.,;:'’"()\-–—/\\]+/g
 const ESPACES = /\s+/g
@@ -99,45 +87,39 @@ export function distanceMetres(a: Coordonnees, b: Coordonnees): number {
   return 2 * RAYON_TERRE_METRES * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
-function coordonneesDe(valeur: AdresseCandidate): Coordonnees | null {
-  if (typeof valeur.latitude !== 'number' || typeof valeur.longitude !== 'number') {
-    return null
-  }
-
-  return { latitude: valeur.latitude, longitude: valeur.longitude }
-}
-
-/** Deux adresses désignent-elles la même porte ? */
+/**
+ * Deux adresses désignent-elles la même porte ?
+ *
+ * UNE SEULE RÈGLE : le même texte, après normalisation, dans la même ville.
+ *
+ * Il y avait auparavant un second critère — « à moins de 25 m selon le GPS ».
+ * Il partait d'une bonne intention (rattraper deux formatages d'une même porte)
+ * mais ne rattrapait rien : Places renvoie toujours le même libellé pour un même
+ * lieu, donc le texte suffisait déjà. En revanche il attrapait les VOISINS, à
+ * une quinzaine de mètres sur une rue normale. Le knocker recevait « porte déjà
+ * cognée » pour des portes jamais faites, et l'alerte perdait toute crédibilité.
+ *
+ * Compromis assumé : une porte saisie à la main sous une forme très différente
+ * (« 1024 De La Rochelle » sans « rue ») passera au travers. C'est un doublon
+ * manqué, pas une fausse alerte — et re-cogner une porte coûte moins cher que
+ * de ne pas oser y aller. Chaque visite compte de toute façon (CLAUDE.md §4.6).
+ */
 export function memeAdresse(
   candidat: AdresseCandidate,
   existant: AdresseCandidate,
-  options: OptionsDoublon = OPTIONS_DOUBLON_DEFAUT,
 ): boolean {
-  // 1. Texte identique après normalisation. Si les deux villes sont connues,
-  //    elles doivent concorder — « 12 rue Principale » existe dans chaque village.
-  const memeTexte =
-    normaliserAdresse(candidat.adresse) === normaliserAdresse(existant.adresse) &&
-    normaliserAdresse(candidat.adresse) !== ''
+  const texteCandidat = normaliserAdresse(candidat.adresse)
 
-  if (memeTexte) {
-    const villeCandidat = candidat.ville ? normaliserAdresse(candidat.ville) : null
-    const villeExistant = existant.ville ? normaliserAdresse(existant.ville) : null
-
-    if (!villeCandidat || !villeExistant || villeCandidat === villeExistant) {
-      return true
-    }
+  if (texteCandidat === '' || texteCandidat !== normaliserAdresse(existant.adresse)) {
+    return false
   }
 
-  // 2. Sinon, la géographie tranche : Places peut formater la même porte de deux
-  //    façons (« 12 Rue Principale » / « 12 Principale St »).
-  const coordCandidat = coordonneesDe(candidat)
-  const coordExistant = coordonneesDe(existant)
+  // Si les deux villes sont connues, elles doivent concorder — « 12 rue
+  // Principale » existe dans chaque village du Québec.
+  const villeCandidat = candidat.ville ? normaliserAdresse(candidat.ville) : null
+  const villeExistant = existant.ville ? normaliserAdresse(existant.ville) : null
 
-  if (coordCandidat && coordExistant) {
-    return distanceMetres(coordCandidat, coordExistant) <= options.seuilMetres
-  }
-
-  return false
+  return !villeCandidat || !villeExistant || villeCandidat === villeExistant
 }
 
 /**
@@ -149,10 +131,9 @@ export function memeAdresse(
 export function trouverDoublon(
   candidat: AdresseCandidate,
   existants: readonly OpportuniteProche[],
-  options: OptionsDoublon = OPTIONS_DOUBLON_DEFAUT,
 ): OpportuniteProche | null {
   const correspondances = existants.filter((existant) =>
-    memeAdresse(candidat, existant, options),
+    memeAdresse(candidat, existant),
   )
 
   if (correspondances.length === 0) return null

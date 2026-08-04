@@ -1,9 +1,14 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 
 import { CadrePage } from '@/components/cadre-page'
 import { exigerAdmin } from '@/lib/auth'
 import { listerCalendriers, type CalendrierGoogle } from '@/lib/google/calendar'
-import { configGoogleDisponible, etatConnexion } from '@/lib/google/credentials'
+import {
+  configGoogleDisponible,
+  etatConnexion,
+  uriRedirection,
+} from '@/lib/google/credentials'
 import { formaterDateHeure, lireDate } from '@/lib/echeances'
 import { createClient } from '@/lib/supabase/server'
 
@@ -53,6 +58,20 @@ export default async function PageGoogle({ searchParams }: Props) {
   await exigerAdmin()
 
   const etat = await etatConnexion()
+
+  /**
+   * L'URI de redirection RÉELLE, telle que Google la recevra.
+   *
+   * Elle est dérivée de l'origine de la requête (`uriRedirection`), donc elle
+   * change avec le port de développement, le domaine de prévisualisation Vercel,
+   * le domaine de production. Une seule qui manque dans la console Google et
+   * c'est `redirect_uri_mismatch` — une erreur qu'on ne peut pas diagnostiquer
+   * sans savoir ce qui a été envoyé. On l'affiche donc, à copier-coller.
+   */
+  const entetes = await headers()
+  const hote = entetes.get('x-forwarded-host') ?? entetes.get('host') ?? ''
+  const protocole = entetes.get('x-forwarded-proto') ?? 'http'
+  const uriACopier = hote ? uriRedirection(`${protocole}://${hote}`) : null
 
   // Les calendriers ne sont interrogeables qu'une fois le compte connecté.
   let calendriers: CalendrierGoogle[] = []
@@ -164,11 +183,42 @@ export default async function PageGoogle({ searchParams }: Props) {
               >
                 Connecter Google Calendar
               </a>
+              {/* Pas de courriel en dur : le compte à utiliser dépend de
+                  l'organisation propriétaire du projet Google Cloud, pas du
+                  code. Nommer le mauvais enverrait droit dans un 403. */}
               <p className="mt-2 text-xs text-grey-text">
-                Connecte-toi avec <strong>info@toituresvitalis.ca</strong>, le
-                compte qui porte les agendas de tous les closers.
+                Connecte-toi avec le compte qui porte les agendas de tous les
+                closers. Il doit appartenir à l’organisation propriétaire du
+                projet Google Cloud, sinon Google refuse avec «&nbsp;Accès
+                bloqué&nbsp;».
               </p>
             </>
+          )}
+
+          {/* Affichée dans les DEUX cas, connecté ou non : un domaine de
+              production ajouté plus tard casserait la reconnexion, et l'erreur
+              `redirect_uri_mismatch` ne dit jamais ce qui a été envoyé. */}
+          {uriACopier && (
+            <div className="mt-4 border-t border-grey-border pt-3">
+              <p className="text-sm font-semibold text-navy">
+                URI de redirection de cet environnement
+              </p>
+              <p className="mt-1 text-xs text-grey-text">
+                À déclarer telle quelle dans Google Cloud Console →
+                Identifiants → ton ID client OAuth → «&nbsp;URI de redirection
+                autorisés&nbsp;». Correspondance exacte : ni barre oblique
+                finale, ni port différent.
+              </p>
+              <code className="mt-2 block overflow-x-auto rounded-lg bg-grey-light px-3 py-2 text-xs break-all text-navy">
+                {uriACopier}
+              </code>
+              <p className="mt-1 text-xs text-grey-text">
+                Chaque environnement a la sienne : local, prévisualisation,
+                production. Ouvre cette page depuis chacun pour relever la
+                bonne. Laisse «&nbsp;Origines JavaScript autorisées&nbsp;» vide
+                — le flux est entièrement serveur.
+              </p>
+            </div>
           )}
         </section>
 
