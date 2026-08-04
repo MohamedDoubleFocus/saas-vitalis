@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { messageConfirmation, messageRappel, peutEnvoyer } from './messages'
+import { messageConfirmation, peutEnvoyer } from './messages'
 
 /** Instant UTC explicite : le test ne dépend pas du fuseau de la machine. */
 function utc(annee: number, mois: number, jour: number, heure = 0) {
@@ -79,31 +79,6 @@ describe('messageConfirmation', () => {
 
     // Au-delà de 3 segments GSM (~480 caractères), la facture grimpe vite.
     expect(texte.length).toBeLessThan(480)
-  })
-})
-
-describe('messageRappel', () => {
-  it('compose le message de la veille', () => {
-    const texte = messageRappel({ closerNom: 'Billal' })
-
-    expect(texte).toContain('c’est Billal de Toitures Vitalis')
-    expect(texte).toContain('notre rencontre demain')
-    expect(texte).toContain('Au plaisir de vous voir demain!')
-  })
-
-  it('ne mentionne aucune heure — le rappel ne la répète pas', () => {
-    expect(messageRappel({ closerNom: 'Billal' })).not.toMatch(/\d+\s*h/)
-  })
-
-  it('reste correct sans nom de closer', () => {
-    const texte = messageRappel({ closerNom: null })
-
-    expect(texte).toContain('c’est l’équipe de Toitures Vitalis')
-    expect(texte).not.toContain('null')
-  })
-
-  it('tient dans une longueur raisonnable', () => {
-    expect(messageRappel({ closerNom: 'Billal' }).length).toBeLessThan(480)
   })
 })
 

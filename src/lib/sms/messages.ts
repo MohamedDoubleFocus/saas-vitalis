@@ -7,16 +7,21 @@ import { formaterDateHeureFuseau, FUSEAU_QUEBEC } from '@/lib/fuseau'
  * `openphone.ts`, côté serveur.
  *
  * ⚙️ Pour changer un message, c'est ICI et nulle part ailleurs.
+ *
+ * ⚠️ PÉRIMÈTRE RÉDUIT. Depuis le passage à Make/GHL, c'est la chaîne
+ * d'automatisation qui parle au client dès qu'un webhook est configuré — y
+ * compris le rappel de la veille, qui n'existe plus ici.
+ *
+ * Ce module ne sert donc plus que de REPLI : sans `MAKE_WEBHOOK_RDV_URL`, en
+ * développement local par exemple, Vitalis envoie encore lui-même la
+ * confirmation. Les deux chaînes ne tournent jamais en même temps — le client
+ * recevrait deux messages pour un seul rendez-vous.
  */
 
 export type ContexteConfirmation = {
   clientNom: string | null
   closerNom: string | null
   dateRdv: Date
-}
-
-export type ContexteRappel = {
-  closerNom: string | null
 }
 
 /** Repli quand le nom du closer manque : le SMS reste envoyable et poli. */
@@ -47,17 +52,6 @@ export function messageConfirmation(contexte: ContexteConfirmation): string {
     `Toitures Vitalis. Je vous confirme notre rendez-vous le ${quand}. ` +
     `Je vais vous présenter les différentes options et répondre à vos questions ` +
     `pour vous aider à prendre la meilleure décision pour votre maison. À bientôt!`
-  )
-}
-
-/** SMS envoyé la veille du rendez-vous, à 9 h. */
-export function messageRappel(contexte: ContexteRappel): string {
-  return (
-    `Bonjour, c’est ${nomCloser(contexte.closerNom)} de Toitures Vitalis. ` +
-    `Je vous confirme notre rencontre demain. Je vais vous présenter les ` +
-    `meilleures options selon vos besoins et votre budget. Si tout vous convient, ` +
-    `on pourra officialiser le projet sur place et réserver votre date ` +
-    `d’installation. Au plaisir de vous voir demain!`
   )
 }
 
