@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react'
 
 import {
+  ICONE_LANGUE,
   ICONE_NOM,
   ICONE_NOTE,
   ICONE_TELEPHONE,
@@ -12,6 +13,7 @@ import {
 import { IndicateurFileAttente } from '@/components/indicateur-file-attente'
 import type { Creneau } from '@/lib/creneaux'
 import type { StatutOpp } from '@/lib/doublons'
+import { LANGUES, LANGUE_DEFAUT, LIBELLES_LANGUE, type LangueClient } from '@/lib/langues'
 import { chercherDoublon, type DoublonTrouve } from '@/lib/doublons-recherche'
 import { formaterDateHeure, lireDate } from '@/lib/echeances'
 import type { ChargeCreationLead } from '@/lib/file-attente/executeurs'
@@ -47,6 +49,7 @@ export type PortePrechargee = {
   adresse: AdresseSelectionnee
   clientNom: string | null
   clientTel: string | null
+  langue: LangueClient
   statutPrecedent: StatutOpp
   nbVisites: number
   derniereVisite: string
@@ -72,6 +75,9 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
   // haute pour le confirmer, pas déchiffrer un E.164.
   const [clientTel, setClientTel] = useState(
     porte?.clientTel ? formaterTelephone(porte.clientTel) : '',
+  )
+  const [langue, setLangue] = useState<LangueClient>(
+    porte?.langue ?? LANGUE_DEFAUT,
   )
   const [note, setNote] = useState('')
   const [enregistrement, setEnregistrement] = useState(false)
@@ -202,6 +208,7 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
       // E.164 si le numéro est lisible ; sinon on conserve la saisie brute
       // plutôt que de la jeter — « ne jamais perdre une saisie » (§5).
       clientTel: telSaisi === '' ? null : (versE164(telSaisi) ?? telSaisi),
+      langue,
       note: note.trim() || null,
       statut,
       dateRdv: creneau ? creneau.debut.toISOString() : null,
@@ -403,6 +410,8 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
               setClientNom={setClientNom}
               clientTel={clientTel}
               setClientTel={setClientTel}
+              langue={langue}
+              setLangue={setLangue}
               note={note}
               setNote={setNote}
               telInvalide={telInvalide}
@@ -422,6 +431,8 @@ export function FormulaireLead({ knockerId, closerId, porte = null }: Props) {
               setClientNom={setClientNom}
               clientTel={clientTel}
               setClientTel={setClientTel}
+              langue={langue}
+              setLangue={setLangue}
               note={note}
               setNote={setNote}
               telInvalide={telInvalide}
@@ -474,6 +485,8 @@ function ChampsClient({
   setClientNom,
   clientTel,
   setClientTel,
+  langue,
+  setLangue,
   note,
   setNote,
   telInvalide,
@@ -483,6 +496,8 @@ function ChampsClient({
   setClientNom: (valeur: string) => void
   clientTel: string
   setClientTel: (valeur: string) => void
+  langue: LangueClient
+  setLangue: (valeur: LangueClient) => void
   note: string
   setNote: (valeur: string) => void
   telInvalide: boolean
@@ -490,6 +505,43 @@ function ChampsClient({
 }) {
   return (
     <>
+      {/* La langue se capte à la porte : c'est le seul moment où quelqu'un
+          l'entend. Deux gros boutons plutôt qu'une liste déroulante — une main,
+          dehors, cible ≥ 44px (§6). */}
+      <fieldset>
+        <legend className="flex items-center gap-2 text-sm font-semibold text-navy">
+          <IconeChamp icone={ICONE_LANGUE} />
+          Langue du client
+        </legend>
+
+        <div className="mt-1.5 flex gap-2">
+          {LANGUES.map((valeur) => {
+            const actif = langue === valeur
+
+            return (
+              <label
+                key={valeur}
+                className={`flex h-11 flex-1 cursor-pointer items-center justify-center rounded-lg border text-base font-semibold transition-colors ${
+                  actif
+                    ? 'border-brand bg-brand/10 text-brand-strong'
+                    : 'border-grey-border bg-white text-navy hover:bg-grey-light'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="langue"
+                  value={valeur}
+                  checked={actif}
+                  onChange={() => setLangue(valeur)}
+                  className="sr-only"
+                />
+                {LIBELLES_LANGUE[valeur]}
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="client_nom"

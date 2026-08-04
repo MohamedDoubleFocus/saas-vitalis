@@ -1,4 +1,5 @@
 import type { StatutOpp } from '@/lib/doublons'
+import { lireLangue, type LangueClient } from '@/lib/langues'
 import { argNullable } from '@/lib/supabase/args'
 import { createClient } from '@/lib/supabase/client'
 
@@ -74,6 +75,8 @@ export type ChargeCreationLead = {
   clientNom: string | null
   /** Déjà normalisé en E.164 par le formulaire (`versE164`). */
   clientTel: string | null
+  /** Langue du CLIENT, entendue à la porte. */
+  langue: LangueClient
   note: string | null
   statut: StatutOpp
   /** ISO. Renseigné seulement si `statut === 'rdv'`. */
@@ -132,6 +135,9 @@ function lireChargeCreationLead(charge: unknown): ChargeCreationLead {
     longitude: nombreOuNull(c.longitude),
     clientNom: texteOuNull(c.clientNom),
     clientTel: texteOuNull(c.clientTel),
+    // `lireLangue` retombe sur le français : une charge ancienne, restée dans la
+    // file avant cette version, ne doit pas être rejetée.
+    langue: lireLangue(c.langue),
     note: texteOuNull(c.note),
     statut: c.statut,
     dateRdv: texteOuNull(c.dateRdv),
@@ -206,11 +212,35 @@ async function envoyerSmsConfirmation(opportuniteId: string): Promise<void> {
 }
 
 /**
- * Ce qui suit un rendez-vous fraîchement booké : l'événement Google et le SMS.
+ * Ce qui suit un rendez-vous fraîchement booké.
  *
- * Les deux partent en parallèle et aucun ne peut faire échouer l'autre.
+ * ⚠️ UN SEUL SYSTÈME PARLE AU CLIENT. Quand le webhook Make est configuré, c'est
+ * lui qui crée l'événement d'agenda et notifie le client — exactement comme pour
+ * les leads inbound. Laisser Vitalis envoyer aussi son SMS ferait recevoir deux
+ * confirmations pour un seul rendez-vous.
+ *
+ * Sans webhook configuré (développement local, ou repli), Vitalis reprend son
+ * ancien comportement : événement Google + SMS. Le basculement tient donc à une
+ * seule variable d'environnement, et il est réversible en la retirant.
+ *
+ * La route décide, pas le client : `MAKE_WEBHOOK_RDV_URL` est un secret serveur
+ * et n'a rien à faire dans le bundle du navigateur.
  */
 async function apresBooking(opportuniteId: string): Promise<void> {
+  const reponse = await fetch('/api/rdv/make', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ opportuniteId }),
+  }).catch(() => null)
+
+  const donnees = reponse
+    ? await reponse.json().catch(() => null as { statut?: string } | null)
+    : null
+
+  // `ignore` = webhook non configuré. C'est le seul cas où l'ancienne chaîne
+  // reprend la main.
+  if (donnees?.statut !== 'ignore') return
+
   await Promise.allSettled([
     synchroniserEvenementGoogle(opportuniteId),
     envoyerSmsConfirmation(opportuniteId),
@@ -232,6 +262,7 @@ async function creerLead(charge: ChargeCreationLead): Promise<void> {
       longitude: charge.longitude,
       client_nom: charge.clientNom,
       client_tel: charge.clientTel,
+      langue: charge.langue,
       statut: charge.statut,
       date_rdv: charge.dateRdv,
       nb_visites: 1,
@@ -287,6 +318,9 @@ async function majLead(charge: ChargeCreationLead & { opportuniteId: string }): 
       // Ne jamais effacer une donnée déjà saisie avec un champ laissé vide.
       client_nom: charge.clientNom ?? existante.client_nom,
       client_tel: charge.clientTel ?? existante.client_tel,
+      // La langue de la visite la plus récente fait foi : c'est celle qu'on
+      // vient d'entendre à la porte, elle corrige une supposition antérieure.
+      langue: charge.langue,
       ...(charge.dateRdv ? { date_rdv: charge.dateRdv } : {}),
       ...(charge.closerId ? { closer_id: charge.closerId } : {}),
       ...(reporteLeRdv ? { nb_reports: existante.nb_reports + 1 } : {}),

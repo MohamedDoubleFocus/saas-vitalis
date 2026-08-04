@@ -72,7 +72,7 @@ async function chargerPorte(
   const { data } = await supabase
     .from('opportunites')
     .select(
-      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, statut, nb_visites, derniere_visite',
+      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, langue, statut, nb_visites, derniere_visite',
     )
     .eq('id', id)
     .eq('knocker_id', knockerId)
@@ -92,6 +92,7 @@ async function chargerPorte(
     },
     clientNom: data.client_nom,
     clientTel: data.client_tel,
+    langue: data.langue,
     statutPrecedent: data.statut,
     nbVisites: data.nb_visites,
     derniereVisite: data.derniere_visite,

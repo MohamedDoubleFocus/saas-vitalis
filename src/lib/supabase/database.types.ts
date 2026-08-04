@@ -189,12 +189,14 @@ export type Database = {
           google_event_id: string | null
           id: string
           knocker_id: string | null
+          langue: Database["public"]["Enums"]["langue_client"]
           latitude: number | null
           longitude: number | null
           montant_contrat: number | null
           nb_reports: number
           nb_visites: number
           rappel_sms_envoye_le: string | null
+          rdv_transmis_le: string | null
           roofer_id: string | null
           source: Database["public"]["Enums"]["source_opp"]
           statut: Database["public"]["Enums"]["statut_opp"]
@@ -222,12 +224,14 @@ export type Database = {
           google_event_id?: string | null
           id?: string
           knocker_id?: string | null
+          langue?: Database["public"]["Enums"]["langue_client"]
           latitude?: number | null
           longitude?: number | null
           montant_contrat?: number | null
           nb_reports?: number
           nb_visites?: number
           rappel_sms_envoye_le?: string | null
+          rdv_transmis_le?: string | null
           roofer_id?: string | null
           source?: Database["public"]["Enums"]["source_opp"]
           statut?: Database["public"]["Enums"]["statut_opp"]
@@ -255,12 +259,14 @@ export type Database = {
           google_event_id?: string | null
           id?: string
           knocker_id?: string | null
+          langue?: Database["public"]["Enums"]["langue_client"]
           latitude?: number | null
           longitude?: number | null
           montant_contrat?: number | null
           nb_reports?: number
           nb_visites?: number
           rappel_sms_envoye_le?: string | null
+          rdv_transmis_le?: string | null
           roofer_id?: string | null
           source?: Database["public"]["Enums"]["source_opp"]
           statut?: Database["public"]["Enums"]["statut_opp"]
@@ -630,6 +636,7 @@ export type Database = {
     }
     Enums: {
       produit_gonano: "fortify" | "revive" | "bio_boost"
+      langue_client: "fr" | "en"
       role_user: "knocker" | "closer" | "roofer" | "admin"
       statut_opp:
         | "absent"
@@ -782,6 +789,7 @@ export const Constants = {
   public: {
     Enums: {
       produit_gonano: ["fortify", "revive", "bio_boost"],
+      langue_client: ["fr", "en"],
       role_user: ["knocker", "closer", "roofer", "admin"],
       statut_opp: [
         "absent",

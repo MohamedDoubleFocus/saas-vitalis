@@ -5,21 +5,25 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 /**
- * Envoi manuel du rendez-vous vers le Google Agenda du closer.
+ * Envoi manuel du rendez-vous vers la chaîne d'automatisation.
  *
- * Existe parce que la synchronisation automatique, déclenchée par la file
- * d'attente au moment du booking, est volontairement **non bloquante** : si
- * Google est injoignable ou si l'appel n'aboutit pas, le rendez-vous est
- * enregistré quand même et `google_event_id` reste vide. Sans ce bouton, il n'y
- * avait aucun moyen de rattraper — ni de savoir que c'était arrivé.
+ * Existe parce que la transmission automatique, déclenchée par la file d'attente
+ * au moment du booking, est volontairement **non bloquante** : si le réseau ou
+ * Make est injoignable, le rendez-vous est enregistré quand même et
+ * `rdv_transmis_le` reste vide. Sans ce bouton, il n'y avait aucun moyen de
+ * rattraper — ni de savoir que c'était arrivé.
+ *
+ * La route `/api/rdv/make` décide elle-même du chemin : Make s'il est
+ * configuré, sinon l'ancienne chaîne Google + SMS. Ce composant ne présume donc
+ * rien de l'un ou de l'autre et parle simplement de « transmission ».
  */
 export function SynchroGoogle({
   opportuniteId,
-  evenementId,
+  transmis,
 }: {
   opportuniteId: string
-  /** `null` tant que le rendez-vous n'est pas dans Google. */
-  evenementId: string | null
+  /** `false` tant que le rendez-vous n'a atteint aucun système externe. */
+  transmis: boolean
 }) {
   const router = useRouter()
 
@@ -27,12 +31,12 @@ export function SynchroGoogle({
   const [message, setMessage] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
 
-  // --- Déjà dans Google ----------------------------------------------------
-  if (evenementId) {
+  // --- Déjà transmis --------------------------------------------------------
+  if (transmis) {
     return (
       <p className="flex items-center gap-2 rounded-2xl bg-white p-4 text-sm text-grey-text shadow-card">
         <CalendarCheck className="size-5 shrink-0" aria-hidden />
-        Dans l’agenda Google du closer.
+        Transmis à l’agenda et au client.
       </p>
     )
   }
@@ -43,7 +47,7 @@ export function SynchroGoogle({
     setErreur(null)
 
     try {
-      const reponse = await fetch('/api/rdv/evenement', {
+      const reponse = await fetch('/api/rdv/make', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ opportuniteId }),
@@ -60,27 +64,27 @@ export function SynchroGoogle({
         return
       }
 
-      // La route répond 200 même sur un échec Google : c'est le champ `statut`
+      // La route répond 200 même sur un échec distant : c'est le champ `statut`
       // qui porte le résultat réel, pas le code HTTP.
       switch (donnees.statut) {
-        case 'cree':
-          setMessage('Envoyé dans l’agenda Google.')
+        case 'transmis':
+          setMessage('Envoyé.')
           router.refresh()
           break
 
-        case 'deja_synchronise':
-          setMessage('Ce rendez-vous y était déjà.')
+        case 'deja_transmis':
+          setMessage('Ce rendez-vous avait déjà été transmis.')
           router.refresh()
           break
 
-        case 'calendrier_non_associe':
+        case 'ignore':
           setErreur(
-            'Aucun calendrier Google n’est associé à ce closer. Un administrateur doit le faire dans Réglages → Google Calendar.',
+            'Aucune automatisation n’est configurée sur le serveur. Un administrateur doit renseigner MAKE_WEBHOOK_RDV_URL.',
           )
           break
 
-        case 'echec_google':
-          setErreur(`Google a refusé : ${donnees.message ?? 'raison inconnue'}`)
+        case 'echec':
+          setErreur(`Envoi refusé : ${donnees.message ?? 'raison inconnue'}`)
           break
 
         default:
@@ -97,12 +101,13 @@ export function SynchroGoogle({
     <div className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-card">
       <p className="flex items-center gap-2 text-sm font-semibold text-navy">
         <CalendarPlus className="size-5 shrink-0" aria-hidden />
-        Pas encore dans l’agenda Google
+        Pas encore transmis
       </p>
 
       <p className="text-xs text-grey-text">
-        Le rendez-vous est bien enregistré dans Vitalis. Seul l’événement Google
-        manque — l’envoi a pu échouer faute de réseau au moment du booking.
+        Le rendez-vous est bien enregistré dans Vitalis. Seuls l’événement
+        d’agenda et la confirmation au client manquent — l’envoi a pu échouer
+        faute de réseau au moment du booking.
       </p>
 
       <button
@@ -115,7 +120,7 @@ export function SynchroGoogle({
           className={`size-5 shrink-0 ${envoi ? 'animate-spin' : ''}`}
           aria-hidden
         />
-        {envoi ? 'Envoi…' : 'Envoyer vers Google'}
+        {envoi ? 'Envoi…' : 'Transmettre maintenant'}
       </button>
 
       {message && (

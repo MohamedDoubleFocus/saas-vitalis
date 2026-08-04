@@ -133,6 +133,41 @@ export function bornesJourneeLocale(
   }
 }
 
+/**
+ * ISO 8601 avec le décalage EXPLICITE du fuseau : `2026-08-05T10:00:00-04:00`.
+ *
+ * Pourquoi pas `toISOString()`, qui rend `…T14:00:00.000Z` ?
+ *
+ * Les deux désignent le même instant, mais un système tiers qui reçoit un `Z`
+ * l'affichera dans SON fuseau — et c'est exactement le bug qu'on vient de
+ * corriger dans l'app. Ici l'heure locale est lisible dans la chaîne elle-même,
+ * et le décalage lève toute ambiguïté. Un humain qui débogue le webhook voit
+ * « 10:00 » et reconnaît l'heure du rendez-vous.
+ *
+ * Le décalage est calculé À CET INSTANT : `-04:00` l'été, `-05:00` l'hiver.
+ */
+export function isoAvecDecalage(
+  instant: Date,
+  fuseau: string = FUSEAU_QUEBEC,
+): string {
+  const p = partiesDansFuseau(instant, fuseau)
+  const deux = (n: number) => String(n).padStart(2, '0')
+
+  // Secondes reprises de l'instant : `partiesDansFuseau` s'arrête aux minutes,
+  // et les fuseaux ne décalent jamais d'un nombre non entier de minutes.
+  const secondes = instant.getUTCSeconds()
+
+  const decalage = decalageMinutes(instant, fuseau)
+  const signe = decalage >= 0 ? '+' : '-'
+  const absolu = Math.abs(decalage)
+
+  return (
+    `${p.annee}-${deux(p.mois)}-${deux(p.jour)}` +
+    `T${deux(p.heure)}:${deux(p.minute)}:${deux(secondes)}` +
+    `${signe}${deux(Math.floor(absolu / 60))}:${deux(absolu % 60)}`
+  )
+}
+
 const FORMAT_LISIBLE = new Map<string, Intl.DateTimeFormat>()
 
 /**

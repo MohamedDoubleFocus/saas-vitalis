@@ -12,6 +12,7 @@ import {
   Hammer,
   HardHat,
   Home,
+  Languages,
   Mail,
   MapPin,
   Navigation,
@@ -68,6 +69,7 @@ export const ICONE_DATE = CalendarClock
 export const ICONE_SUPERFICIE = Ruler
 export const ICONE_NOM = UserRound
 export const ICONE_NOTE = ClipboardList
+export const ICONE_LANGUE = Languages
 export const ICONE_ITINERAIRE = Navigation
 export const ICONE_PHOTO = Camera
 export const ICONE_MAISON = Home

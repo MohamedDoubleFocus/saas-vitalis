@@ -1,6 +1,6 @@
 import { IconeStatut } from '@/components/icones'
 
-import { Navigation, Phone } from 'lucide-react'
+import { Languages, Navigation, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -14,6 +14,7 @@ import {
   libelleEcheance,
   lireDate,
 } from '@/lib/echeances'
+import { LIBELLES_LANGUE_LONG } from '@/lib/langues'
 import { LIBELLES_STATUT } from '@/lib/statuts'
 import { createClient } from '@/lib/supabase/server'
 import { formaterTelephone, lienTelephone } from '@/lib/telephone'
@@ -53,7 +54,7 @@ export default async function PageDetailRdv({ params }: Props) {
   const { data: opportunite } = await supabase
     .from('opportunites')
     .select(
-      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, client_courriel, statut, date_rdv, nb_visites, derniere_visite, knocker_id, google_event_id, montant_contrat, depot_recu, superficie_pi2, date_cible_debut, date_cible_fin, vendu_le',
+      'id, adresse, ville, code_postal, latitude, longitude, client_nom, client_tel, client_courriel, langue, statut, date_rdv, nb_visites, derniere_visite, knocker_id, google_event_id, rdv_transmis_le, montant_contrat, depot_recu, superficie_pi2, date_cible_debut, date_cible_fin, vendu_le',
     )
     .eq('id', id)
     .maybeSingle()
@@ -144,13 +145,28 @@ export default async function PageDetailRdv({ params }: Props) {
         {dateRdv && (
           <SynchroGoogle
             opportuniteId={opportunite.id}
-            evenementId={opportunite.google_event_id}
+            transmis={Boolean(opportunite.rdv_transmis_le ?? opportunite.google_event_id)}
           />
         )}
 
         {/* --- Le client --------------------------------------------------- */}
         <section className="rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="font-display text-base font-semibold text-navy">Client</h2>
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="font-display text-base font-semibold text-navy">
+              Client
+            </h2>
+
+            {/* La langue se lit AVANT de composer le numéro. Sur le bloc client
+                plutôt qu'en bas de fiche : c'est là que le closer regarde juste
+                avant d'appeler. Le français n'est pas signalé — c'est le cas
+                normal, et un badge sur chaque fiche deviendrait du bruit. */}
+            {opportunite.langue !== 'fr' && (
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-navy px-2.5 py-1 text-xs font-semibold text-white">
+                <Languages className="size-4" aria-hidden />
+                {LIBELLES_LANGUE_LONG[opportunite.langue]}
+              </span>
+            )}
+          </div>
 
           <dl className="mt-2 flex flex-col gap-1 text-sm">
             <Ligne intitule="Nom" valeur={opportunite.client_nom} />
